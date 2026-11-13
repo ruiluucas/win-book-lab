@@ -30,7 +30,7 @@ def carrega_csv(caminho):
 
 
 def carrega_db(inicio, fim, dsn=None):
-    """Carrega book do Postgres numa janela. inicio/fim são datetime ou string ISO."""
+    """Carrega book do Postgres numa janela. Convenção [inicio, fim) — igual a recorta()."""
     import psycopg2
     dsn = dsn or os.environ.get("MERCADO_DSN")
     if not dsn:
@@ -44,7 +44,8 @@ def carrega_db(inicio, fim, dsn=None):
            max(CASE WHEN lado=2 AND nivel=0 THEN volume END) AS vb1,
            max(CASE WHEN lado=1 AND nivel=0 THEN volume END) AS va1
     FROM book
-    WHERE ts AT TIME ZONE 'America/Sao_Paulo' BETWEEN %s AND %s
+    WHERE ts AT TIME ZONE 'America/Sao_Paulo' >= %s
+      AND ts AT TIME ZONE 'America/Sao_Paulo' <  %s
     GROUP BY ts ORDER BY ts
     """
     conn = psycopg2.connect(dsn)
@@ -88,6 +89,15 @@ def _agrega(d):
     S["obi1"] = (S.vb1 - S.va1) / (S.vb1 + S.va1)
     S["obi5"] = (S.vbid - S.vask) / S.depth
     return S
+
+
+def recorta(S, inicio, fim):
+    """Recorta uma janela com convenção EXPLÍCITA: [inicio, fim) — inicio incluso,
+    fim EXCLUSO. A mesma convenção vale para --inicio/--fim na CLI e para o SQL."""
+    ini = pd.Timestamp(inicio)
+    f = pd.Timestamp(fim)
+    m = (S.ts >= ini) & (S.ts < f)
+    return S[m].reset_index(drop=True)
 
 
 def amostra_independente(S, minutos):

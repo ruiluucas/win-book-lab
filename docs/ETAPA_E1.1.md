@@ -93,3 +93,62 @@ a demonstração do problema que E1.1 resolve: sem janela declarada, o número m
 
 O critério correto passou a ser: *"janela diferente produz número diferente do
 documentado"*, que se verifica independentemente do tamanho da coleta.
+
+---
+
+## Verificações pedidas na revisão do dono
+
+### V1 — Critério 3 estava fraco → substituído por testes determinísticos
+
+**Crítica aceita.** "Janela diferente produz número diferente" prova que o filtro
+*funciona*, não que funciona *corretamente*.
+
+Substituído por 7 testes com resultado esperado calculado à mão, sobre uma fixture
+**sintética** de controle total (`tests/fixtures/sintetica_6snapshots.csv`):
+6 snapshots, um por minuto exato (09:00 a 09:05), preço subindo 10 pts/min.
+
+| teste | janela | esperado | verifica |
+|---|---|---|---|
+| `test_deterministico_janela_A` | [09:00, 09:03) | **3 snapshots** (min 0,1,2) | contagem exata |
+| `test_deterministico_janela_B` | [09:02, 09:05) | **3 snapshots** (min 2,3,4) | contagem exata, janela deslocada |
+| `test_limite_inicio_inclusivo` | [09:01, 09:04) | min 1 **presente** | convenção do limite inferior |
+| `test_limite_fim_exclusivo` | [09:01, 09:04) | min 4 **ausente**, lista = [1,2,3] | convenção do limite superior |
+| `test_idempotencia_mesma_janela` | idêntica 2× | frames iguais | determinismo no núcleo |
+| `test_idempotencia_cli` | CLI 2× | **stdout idêntico** | determinismo ponta a ponta |
+| `test_hash_aparece_e_bate_com_repo` | — | hash impresso == `git rev-parse` | rastreabilidade |
+
+**Convenção documentada e unificada:** `[inicio, fim)` — início **incluso**, fim **excluso**.
+Vale para `recorta()` (CSV) e para o SQL (`>= inicio AND < fim`).
+
+**Inconsistência encontrada durante a verificação:** a CLI usava `BETWEEN` (inclusivo nos
+dois lados) enquanto `recorta()` usava `[inicio, fim)`. **Corrigido** para a mesma
+convenção. Após a correção, a janela documentada continua reproduzindo n=26, 50,0%, p=0,977.
+
+### V2 — Hash do commit na saída
+
+**Já estava implementado; a evidência não tinha sido apresentada.** Agora está:
+
+```
+$ python scripts/book_estrito.py --csv tests/fixtures/book_20min.csv
+  JANELA DECLARADA : csv  ->  tests/fixtures/book_20min.csv
+  DADOS ENCONTRADOS: 2026-11-13 09:30 -> 09:49 (20.0 min)
+  SNAPSHOTS        : 6,657
+  COMMIT           : cd67a1c
+  CUSTO            : 5.0 pts
+
+$ git rev-parse --short HEAD
+cd67a1c
+```
+
+Implementação: `analisador.py:15` (`commit_hash()`), usado em `analisador.py:112`.
+Teste automatizado: `test_hash_aparece_e_bate_com_repo` — compara o valor impresso com
+`git rev-parse`, então **falha se divergirem**.
+
+## Suíte final
+
+```
+tests/test_janela.py ..............  [100%]
+14 passed
+```
+
+7 testes originais + 7 determinísticos. Todos rodam **sem banco e sem MT5**.
