@@ -541,7 +541,12 @@ function aplicarConfigDaTela() {
 }
 
 $('btn-config').onclick = abreConfig;
-$('cfg-fonte').onchange = async () => { await salvaFonte(); atualizaEstadoFonte(true); };
+$('cfg-fonte').onchange = async () => {
+    await salvaFonte();
+    atualizaEstadoFonte(true);
+    // o log tambem muda de origem: local le arquivo, VM le `docker logs`
+    try { $('log-out').textContent = 'carregando\u2026'; $('log-out').textContent = await window.lab.logtail(); } catch {}
+  };
   for (const id of ['cfg-vm-host', 'cfg-vm-user', 'cfg-vm-porta']) {
     $(id).onchange = () => { salvaFonte().then(() => atualizaEstadoFonte(true)); };
   }

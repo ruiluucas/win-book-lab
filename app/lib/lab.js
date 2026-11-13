@@ -63,7 +63,10 @@ async function statusRemoto(cfg) {
     'echo "ponte=$(ss -tln 2>/dev/null | grep -q \':18812 \' && echo sim || echo nao)"',
     'echo "db=$(docker ps --filter name=winbook-db --format \'{{.Status}}\')"',
     'echo "col=$(docker ps --filter name=winbook-coletor --format \'{{.Status}}\')"',
-    'echo "sym=$(docker logs --tail 200 winbook-coletor 2>&1 | grep -o \'contrato: WIN[A-Z0-9]*\' | tail -1 | cut -d\' \' -f2)"',
+    // O contrato vem do BANCO, nao do log: o coletor escreve ~10 linhas/s e a
+    // mensagem de startup sai da janela do `docker logs` em segundos.
+    'echo "sym=$(docker exec winbook-db psql -U winbook -d mercado -t -A '
+      + '-c \'SELECT symbol FROM book ORDER BY ts DESC LIMIT 1\')"',
   ].join('; ');
 
   const v = cfg.vm;
@@ -117,14 +120,19 @@ async function getStatus() {
   };
 }
 
+// Cada subconsulta PRECISA de alias. Sem nome, o driver `pg` batiza todas de
+// '?column?' e o objeto de resultado fica com uma chave so:
+// SELECT (1),(2),(3) -> { '?column?': 3 }. Medido 13/11; era o motivo de a
+// metrica de snapshots vir '—' mesmo com o banco cheio.
 const SQL = `
 SELECT
-  (SELECT count(DISTINCT ts) FROM book WHERE ts >= current_date),
-  (SELECT count(*) FROM tick WHERE ts >= current_date),
-  (SELECT count(*) FROM book_delta_v2 WHERE ts >= current_date),
-  (SELECT count(*) FROM book WHERE ts >= current_date),
-  (SELECT count(DISTINCT ts) FROM book WHERE ts >= current_date AND ts >= now() - interval '60 seconds'),
-  (SELECT to_char(max(ts) AT TIME ZONE 'America/Sao_Paulo','HH24:MI:SS') FROM book);
+  (SELECT count(DISTINCT ts) FROM book WHERE ts >= current_date)                                AS snap_hoje,
+  (SELECT count(*) FROM tick WHERE ts >= current_date)                                          AS tick_hoje,
+  (SELECT count(*) FROM book_delta_v2 WHERE ts >= current_date)                                 AS delta_hoje,
+  (SELECT count(*) FROM book WHERE ts >= current_date)                                          AS book_hoje,
+  (SELECT count(DISTINCT ts) FROM book WHERE ts >= current_date
+     AND ts >= now() - interval '60 seconds')                                                   AS snap_1min,
+  (SELECT to_char(max(ts) AT TIME ZONE 'America/Sao_Paulo','HH24:MI:SS') FROM book)             AS ultimo;
 `;
 
 async function dbStats() {

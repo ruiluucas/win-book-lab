@@ -106,6 +106,15 @@ CREATE TABLE IF NOT EXISTS book_delta_v2 (
 );
 SELECT create_hypertable('book_delta_v2', by_range('ts', INTERVAL '1 day'), if_not_exists => TRUE);
 CREATE INDEX IF NOT EXISTS bd2_idx ON book_delta_v2 (symbol, lado, preco, ts DESC);
+
+-- Sem o SET abaixo, add_compression_policy falha com
+-- 'columnstore not enabled on hypertable' e o psql PARA ali — foi o que
+-- impediu os ALTER TABLE do fim do arquivo de rodarem num banco novo.
+ALTER TABLE book_delta_v2 SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'symbol, lado',
+    timescaledb.compress_orderby   = 'ts'
+);
 SELECT add_compression_policy('book_delta_v2', INTERVAL '2 days', if_not_exists => TRUE);
 SELECT add_retention_policy('book_delta_v2', INTERVAL '2 years', if_not_exists => TRUE);
 

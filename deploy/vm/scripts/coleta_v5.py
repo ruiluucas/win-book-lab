@@ -148,8 +148,11 @@ def main():
         try:
             if ticks:
                 if tem_ns:
+                    # a tupla tem 10 campos (o ultimo e o id da thread, nao vai
+                    # para o banco). Passar `ticks` cru dava
+                    # "INSERT has more expressions than target columns".
                     execute_values(cur, "INSERT INTO tick (ts,symbol,time_msc,bid,ask,last,volume,lado_inferido,t_recv_ns) VALUES %s",
-                                   ticks, page_size=1000)
+                                   [t[:9] for t in ticks], page_size=1000)
                 else:
                     execute_values(cur, "INSERT INTO tick (ts,symbol,time_msc,bid,ask,last,volume,lado_inferido) VALUES %s",
                                    [t[:8] for t in ticks], page_size=1000)
