@@ -15,6 +15,7 @@ node teste-ui/icones.js       # os 15 ícones .info têm que estar estilizados
 node teste-ui/config.js       # modal, persistência, cadência de 10x/s
 node teste-ui/timeframes.js   # troca de timeframe muda o dado, não só o botão
 node teste-ui/taxa.js         # botões no header e cadências
+node teste-ui/status-header.js # pílulas de status e tooltip rico
 ```
 
 Cada script sai com código 0/1 e imprime PASS/FALHA por asserção.

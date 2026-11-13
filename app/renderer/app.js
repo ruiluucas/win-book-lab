@@ -23,41 +23,73 @@ $('w-close').onclick = () => window.win.close();
 window.win.onState(m => { $('w-max').title = m ? 'Restaurar' : 'Maximizar'; });
 
 // ==================== status ====================
-function setPill(k, on) {
-  document.querySelector(`.pill[data-k="${k}"]`).classList.toggle('on', !!on);
+// As pilulas do header foram removidas: repetiam os 4 cards logo abaixo.
+// Mantido como no-op para nao quebrar chamadas antigas.
+// ==================== status (pilulas do header) ====================
+// Os 4 cards foram removidos: ocupavam 103 px de altura para repetir o que o
+// header ja pode mostrar. Agora a pilula carrega o estado (bolinha) e o detalhe
+// vai num tooltip rico.
+
+function pillTexto(k, linhas) {
+  const el = document.querySelector(`.pill[data-k="${k}"]`);
+  if (el) el.setAttribute('data-tip', linhas.join('\n'));
 }
 
 function paintStatus(s) {
-  setPill('mt5', s.mt5);
-  $('v-mt5').textContent = s.mt5 ? 'aberto' : 'fechado';
-  $('s-mt5').textContent = s.mt5 ? 'ok' : 'off';
-  $('s-mt5').className = 'st ' + (s.mt5 ? 'ok-on' : 'ok-off');
-  $('c-mt5').classList.toggle('on', s.mt5);
+  const set = (k, on) => {
+    const el = document.querySelector(`.pill[data-k="${k}"]`);
+    if (el) el.classList.toggle('on', !!on);
+  };
 
-  setPill('bridge', s.bridge);
-  $('v-bridge').textContent = s.bridge ? 'ativa' : 'off';
-  $('s-bridge').textContent = s.bridge ? 'ok' : 'off';
-  $('s-bridge').className = 'st ' + (s.bridge ? 'ok-on' : 'ok-off');
-  $('c-bridge').classList.toggle('on', s.bridge);
+  set('mt5', s.mt5);
+  pillTexto('mt5', [
+    `MT5 — ${s.mt5 ? 'aberto' : 'fechado'}`,
+    'Terminal MetaTrader 5 via Wine/Proton.',
+    s.mt5 ? 'Coletando book e tick normalmente.'
+          : 'Feche e reabra pelo Lutris. O CLI está quebrado, então não dá para abrir por script.',
+  ]);
+
+  set('bridge', s.bridge);
+  pillTexto('bridge', [
+    `Ponte RPyC — ${s.bridge ? 'ativa' : 'fora'}`,
+    'Porta 18812 · liga o Python ao MT5.',
+    s.bridge ? 'Latência típica: 5–80 ms por chamada.'
+             : 'Sobe sozinha ao clicar em Ligar.',
+  ]);
 
   const dbOn = !!s.docker;
-  setPill('docker', dbOn);
-  $('v-docker').textContent = dbOn ? 'no ar' : 'off';
-  $('s-docker').textContent = dbOn ? 'ok' : 'off';
-  $('s-docker').className = 'st ' + (dbOn ? 'ok-on' : 'ok-off');
-  $('v-docker').title = s.docker || '';
-  $('c-docker').classList.toggle('on', dbOn);
+  set('docker', dbOn);
+  pillTexto('docker', [
+    `Banco — ${dbOn ? 'no ar' : 'fora'}`,
+    'TimescaleDB :5434 · docker mercado-db',
+    dbOn ? s.docker : 'Container parado. Sobe junto com a coleta.',
+    'Tabelas: book (snapshots), tick (negócios), book_delta_v2.',
+  ]);
 
-  const colOn = !!s.collector;
-  setPill('collector', colOn);
-  $('v-collector').textContent = colOn ? s.collector.symbol : 'parado';
-  $('s-collector').textContent = colOn ? 'ok' : 'off';
-  $('s-collector').className = 'st ' + (colOn ? 'ok-on' : 'ok-off');
-  $('h-collector').textContent = colOn ? `pid ${s.collector.pid}` : 'v5 · delta por preço';
-  $('c-collector').classList.toggle('on', colOn);
+  const c = s.collector;
+  set('collector', !!c);
+  if (c) {
+    pillTexto('collector', [
+      `Coletor — ${c.symbol}`,
+      `pid ${c.pid} · coleta_v5 · flush 0,1 s`,
+      'Grava snapshot do book + delta por preço a cada mudança.',
+      'Detecta o contrato vigente sozinho na virada do mês.',
+    ]);
+    // mostra o contrato na propria pilula: e a informacao mais util do conjunto
+    const el = document.querySelector('.pill[data-k="collector"]');
+    if (el) el.lastChild.textContent = ` ${c.symbol}`;
+  } else {
+    pillTexto('collector', [
+      'Coletor — parado',
+      'Nenhum processo coleta_v5 rodando.',
+      'Clique em Ligar (▶) para subir banco, ponte e coletor.',
+    ]);
+    const el = document.querySelector('.pill[data-k="collector"]');
+    if (el) el.lastChild.textContent = 'Coletor';
+  }
 
-  $('btn-start').disabled = colOn || !s.mt5;
-  $('btn-stop').disabled = !colOn;
+  $('btn-start').disabled = !!c || !s.mt5;
+  $('btn-stop').disabled = !c;
 }
 
 // ==================== metricas ====================
@@ -320,10 +352,18 @@ document.body.appendChild(TT);
 let ttAtual = null;
 
 function mostraTip(el) {
-  const txt = el.getAttribute('data-tip');
-  if (!txt) return;
+  const bruto = el.getAttribute('data-tip');
+  if (!bruto) return;
   ttAtual = el;
-  TT.textContent = txt;
+
+  // formato: 1a linha titulo, 2a subtitulo, resto detalhes
+  TT.textContent = '';
+  bruto.split('\n').forEach((linha, i) => {
+    const d = document.createElement('div');
+    d.textContent = linha;
+    d.className = i === 0 ? 'tt-titulo' : (i === 1 ? 'tt-sub' : 'tt-linha');
+    TT.appendChild(d);
+  });
   TT.classList.add('on');
 
   // medir DEPOIS de exibir: offsetWidth ja respeita o max-width do CSS

@@ -29,15 +29,8 @@ main{padding:18px 24px 40px}
 .tb-title{font-size:13px;font-weight:600;letter-spacing:-.1px;white-space:nowrap}
 .tb-path{color:var(--dim);font-size:10px;font-family:var(--mono);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.65}
-.tb-center{display:flex;gap:6px;margin-left:auto}
-.tb-right{display:flex;gap:2px;-webkit-app-region:no-drag;margin-left:8px}
+.tb-right{display:flex;gap:2px;-webkit-app-region:no-drag;margin-left:auto}
 
-.pill{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--dim);
-  background:var(--panel);border:1px solid var(--border);border-radius:20px;
-  padding:3px 10px;transition:.25s;white-space:nowrap}
-.pill i{width:6px;height:6px;border-radius:50%;background:#3a4256;transition:.25s}
-.pill.on i{background:var(--ok);box-shadow:0 0 7px var(--ok)}
-.pill.on{color:var(--txt);border-color:#2a3f63}
 
 .wbtn{
   width:36px;height:32px;display:grid;place-items:center;
@@ -302,3 +295,35 @@ h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;
   pointer-events:none; opacity:0; transition:opacity .1s;
 }
 #tt.on{opacity:1}
+
+/* ================= PILULAS DE STATUS NO HEADER ================= */
+/* Substituem os 4 cards (103 px de altura). Detalhe vai no tooltip. */
+.pill{
+  display:flex; align-items:center; gap:6px;
+  font-size:10px; color:var(--dim);
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:20px; padding:3px 10px;
+  transition:.25s; white-space:nowrap;
+  cursor:help; -webkit-app-region:no-drag; user-select:none;
+}
+.pill i{width:6px;height:6px;border-radius:50%;background:#3a4256;transition:.25s;flex:none}
+.pill.on i{background:var(--ok); box-shadow:0 0 7px var(--ok)}
+.pill.on{color:var(--txt); border-color:#2a3f63}
+.pill:hover{background:var(--panel2); border-color:#2e3a52}
+.tb-center{display:flex; gap:6px; margin-left:auto; align-items:center}
+
+/* ================= TOOLTIP RICO ================= */
+/* primeira linha = titulo, segunda = subtitulo mono, resto = detalhes */
+#tt{white-space:normal; display:block}
+#tt .tt-titulo{
+  font-size:12px; font-weight:600; color:var(--txt);
+  margin-bottom:3px; line-height:1.3;
+}
+#tt .tt-sub{
+  font-size:10px; color:var(--accent); font-family:var(--mono);
+  margin-bottom:6px; padding-bottom:6px;
+  border-bottom:1px solid rgba(46,58,82,.7);
+}
+#tt .tt-linha{
+  font-size:10.5px; color:var(--dim); line-height:1.5;
+}

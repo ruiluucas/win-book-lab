@@ -54,53 +54,6 @@
 
 <main>
 
-  <!-- ================= STATUS ================= -->
-  <section class="cards">
-    <div class="card" id="c-mt5">
-      <div class="card-top">
-        <span class="lbl">MT5
-          <span class="info" data-tip="MetaTrader 5. Precisa estar aberto pela GUI do Lutris — o CLI do Lutris está quebrado, então não dá para abrir por script.">i</span>
-        </span>
-        <span class="st ok-off" id="s-mt5">off</span>
-      </div>
-      <div class="card-val" id="v-mt5">fechado</div>
-      <div class="card-hint">GUI via Lutris</div>
-    </div>
-
-    <div class="card" id="c-bridge">
-      <div class="card-top">
-        <span class="lbl">Ponte RPyC
-          <span class="info" data-tip="Ponte RPyC na porta 18812. É ela que leva comandos do Python até o MT5. Sem ela, não há book nem tick.">i</span>
-        </span>
-        <span class="st ok-off" id="s-bridge">off</span>
-      </div>
-      <div class="card-val" id="v-bridge">off</div>
-      <div class="card-hint">:18812</div>
-    </div>
-
-    <div class="card" id="c-docker">
-      <div class="card-top">
-        <span class="lbl">Banco
-          <span class="info" data-tip="TimescaleDB em Docker na porta 5434. Hypertables: book (snapshots), tick (negócios) e book_delta_v2 (mudanças por preço).">i</span>
-        </span>
-        <span class="st ok-off" id="s-docker">off</span>
-      </div>
-      <div class="card-val" id="v-docker">off</div>
-      <div class="card-hint">TimescaleDB :5434</div>
-    </div>
-
-    <div class="card" id="c-collector">
-      <div class="card-top">
-        <span class="lbl">Coletor
-          <span class="info" data-tip="Processo coleta_v5.py. Lê o book a cada mudança e grava snapshot + delta por preço. Detecta o contrato WIN vigente automaticamente.">i</span>
-        </span>
-        <span class="st ok-off" id="s-collector">off</span>
-      </div>
-      <div class="card-val" id="v-collector">parado</div>
-      <div class="card-hint" id="h-collector">v5 · delta por preço</div>
-    </div>
-  </section>
-
   <!-- ================= GRAFICO + BOOK ================= -->
   <section class="market">
     <div class="panel chart-panel">
