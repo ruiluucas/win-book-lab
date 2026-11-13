@@ -12,9 +12,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 from analisador import carrega_db, carrega_csv, cabecalho
 from tempo import mede, intervalo_nominal
+from parametros import CUSTO_BASE, SENSIBILIDADES, PT_RS, valida
 
-CUSTO = 5.0   # NAO alterado nesta etapa (custo e P0-3)
-PT_RS = 0.20
+CUSTO = CUSTO_BASE   # P0-3: fonte unica em parametros.py
 
 
 def linha(d):
@@ -28,12 +28,15 @@ def main():
     ap = argparse.ArgumentParser(description="Horizonte por TEMPO (P0-2)")
     ap.add_argument("--inicio"); ap.add_argument("--fim"); ap.add_argument("--csv")
     ap.add_argument("--fator", type=float, default=2.0, help="1, 2 ou 5 (default 2)")
+    ap.add_argument("--custo", type=float, default=CUSTO_BASE,
+                    help=f"custo em pts (default {CUSTO_BASE}; cenarios {SENSIBILIDADES})")
     a = ap.parse_args()
 
+    custo = valida(a.custo)
     if a.csv:
-        S = carrega_csv(a.csv); cabecalho(S, "csv", a.csv, CUSTO)
+        S = carrega_csv(a.csv); cabecalho(S, "csv", a.csv, custo)
     elif a.inicio and a.fim:
-        S = carrega_db(a.inicio, a.fim); cabecalho(S, a.inicio, a.fim, CUSTO)
+        S = carrega_db(a.inicio, a.fim); cabecalho(S, a.inicio, a.fim, custo)
     else:
         print(">>> ERRO: janela obrigatoria (--inicio/--fim ou --csv)", file=sys.stderr)
         sys.exit(2)
@@ -81,8 +84,18 @@ def main():
         print(f"  {mh:>3} {d['n_valido']:>8}{d['cobertura']*100:>7.1f}% "
               f"{d['h_real_mediana']:>8.3f}{d['bruto_medio']:>+9.1f}"
               f"{d['bruto_medio']-CUSTO:>+9.1f}")
+    # P0-3: os tres cenarios SEMPRE, lado a lado
     print()
-    print("  Custo 5,0 mantido (P0-3). Metodo antigo: python scripts/book_estrito.py")
+    print("  SENSIBILIDADE DE CUSTO (fator %.0fx, h=3) — P0-3" % a.fator)
+    print(f"  {'custo':>7} {'bruto':>9} {'liquido':>9} {'R$/op':>9} {'acerto':>8}")
+    for c in SENSIBILIDADES:
+        d = mede(S, 3, fator=a.fator)
+        liq = d["bruto_medio"] - c
+        marca = " <-- base" if c == CUSTO_BASE else ""
+        print(f"  {c:>7.1f} {d['bruto_medio']:>+9.1f} {liq:>+9.1f} {liq*PT_RS:>+9.2f} "
+              f"{d['acerto']*100:>7.1f}%{marca}")
+    print()
+    print("  Metodo antigo (custo 5, historico): python scripts/book_estrito.py")
 
 
 if __name__ == "__main__":

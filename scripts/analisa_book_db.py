@@ -18,7 +18,10 @@ import psycopg2
 
 DSN = os.environ.get("MERCADO_DSN",
                     "host=127.0.0.1 port=5434 dbname=mercado user=postgres password=CHANGE_ME")
-CUSTO, PT_RS = 5.0, 0.20
+# P0-3: fonte unica em parametros.py (antes era 5.0 hardcoded aqui)
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from parametros import CUSTO_HISTORICO_2026_11_13 as CUSTO, PT_RS
 
 def carrega(dia=None):
     q = """

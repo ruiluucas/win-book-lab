@@ -13,7 +13,10 @@ import numpy as np
 from scipy import stats
 from analisador import (carrega_db, carrega_csv, amostra_independente, cabecalho)
 
-CUSTO = 5.0      # E1.2 ainda não aplicado — mantido para reproduzir o resultado de 13/11
+# HISTORICO: os resultados de 13/11 usaram 5,0. O default permanece 5,0 para que
+# este script continue reproduzindo aquele numero. Para o custo-base atual use
+# --custo 7.5 (ou rode book_tempo.py, que ja traz a sensibilidade 5/7,5/10).
+CUSTO = 5.0
 PT_RS = 0.20
 
 
@@ -23,7 +26,11 @@ def main():
     ap.add_argument("--inicio", help="ISO, ex: '2026-11-13 09:20'")
     ap.add_argument("--fim", help="ISO, ex: '2026-11-13 10:40'")
     ap.add_argument("--csv", help="fixture CSV em vez do banco (roda sem Postgres)")
+    ap.add_argument("--custo", type=float, default=5.0,
+                    help="custo em pts (default 5.0 = reproduz o resultado historico de 13/11)")
     a = ap.parse_args()
+    global CUSTO
+    CUSTO = a.custo
 
     if a.csv:
         S = carrega_csv(a.csv)
