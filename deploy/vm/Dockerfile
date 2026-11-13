@@ -5,9 +5,11 @@ FROM python:3.12-slim
 RUN pip install --no-cache-dir rpyc==6.0.1 psycopg2-binary==2.9.10
 
 WORKDIR /app
-COPY scripts/ /app/scripts/
+COPY scripts/     /app/scripts/
+COPY run_sessao.sh /app/run_sessao.sh
+RUN chmod +x /app/run_sessao.sh
 
 # sem buffer: o log precisa aparecer na hora no docker logs
 ENV PYTHONUNBUFFERED=1
 
-ENTRYPOINT ["python", "/app/scripts/coleta_v5.py"]
+ENTRYPOINT ["/app/run_sessao.sh"]
