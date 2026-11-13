@@ -175,8 +175,12 @@ marcada como suspeita** e não entra em análise. Só o que passou em P0.5 é us
 1. **Flags reais de agressor** — impossível nesta conta (copy_ticks = 0).
 2. **Offset servidor−local** por sessão — não medido, declarado como ±3 ms.
 3. **Taxa real de mudança do book em rajadas.** A medição de 8,8/s foi feita em mercado
-   calmo, com o mesmo polling que se quer validar. **É circular.** Em abertura e em
-   notícia a taxa sobe e a perda pode ser maior.
+   calmo, com o mesmo polling que se quer validar. **É circular.**
+
+   **Evidência nova (log do coletor v4, 13/11):** a taxa de ticks variou de
+   **10/s a 19/s** no mesmo dia (1,9×). Isso confirma que 8,8 mudanças/s **não é teto**,
+   é a taxa de mercado calmo. O v5 tem latência de 6 ms (~83 leituras/s), então a
+   margem existe — mas **não foi medido em rajada real**.
 4. **Referências bibliográficas.** Baldo et al. (2026), Kili et al. (2025), Grądzki et
    al. (2025) e Bhand & Joshi (2026) **não foram confirmadas independentemente** por mim
    — vieram de uma coleta automatizada. Os números atribuídos a elas foram **removidos
