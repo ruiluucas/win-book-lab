@@ -310,32 +310,58 @@ $('btn-tempo').onclick = () => rodar('tempo');
 $('btn-linhas').onclick = () => rodar('linhas');
 
 
-// ==================== TOOLTIP SEM VAZAR ====================
-// O ::after nao pode ser medido, entao estimamos pelo tamanho do texto e viramos
-// o tooltip para a esquerda quando ele passaria da borda direita, e para cima
-// quando passaria do rodape.
-function ajustaTooltip(el) {
-  const txt = el.getAttribute('data-tip') || '';
-  el.classList.remove('tip-inv', 'tip-up');
+// ==================== TOOLTIP FLUTUANTE ====================
+// Um unico elemento, posicionado por JS. Mede a largura real depois de mostrar e
+// faz clamp nas DUAS bordas — a versao anterior so tratava o lado direito e o
+// texto era cortado quando o rotulo ficava colado na esquerda.
+const TT = document.createElement('div');
+TT.id = 'tt';
+document.body.appendChild(TT);
+let ttAtual = null;
 
+function mostraTip(el) {
+  const txt = el.getAttribute('data-tip');
+  if (!txt) return;
+  ttAtual = el;
+  TT.textContent = txt;
+  TT.classList.add('on');
+
+  // medir DEPOIS de exibir: offsetWidth ja respeita o max-width do CSS
+  const tw = TT.offsetWidth;
+  const th = TT.offsetHeight;
   const r = el.getBoundingClientRect();
-  // largura estimada: o CSS limita em 300px, ~6.2px por caractere
-  const larg = Math.min(300, Math.max(120, txt.length * 6.2 + 24));
-  const centro = r.left + r.width / 2;
-  const passariaDireita = centro + larg / 2 > window.innerWidth - 10;
-  const passariaEsquerda = centro - larg / 2 < 10;
-  if (passariaDireita && !passariaEsquerda) el.classList.add('tip-inv');
+  const margem = 8;
 
-  // altura estimada: ~18px por linha de 42 caracteres
-  const linhas = Math.ceil(txt.length / 42) || 1;
-  const alt = linhas * 17 + 20;
-  if (r.bottom + 8 + alt > window.innerHeight - 10) el.classList.add('tip-up');
+  // horizontal: centra no elemento e prende dentro da janela
+  let left = r.left + r.width / 2 - tw / 2;
+  left = Math.max(margem, Math.min(left, window.innerWidth - tw - margem));
+
+  // vertical: abaixo; se nao couber, acima; se nem isso, cola no topo
+  let top = r.bottom + 8;
+  if (top + th > window.innerHeight - margem) top = r.top - th - 8;
+  if (top < margem) top = margem;
+
+  TT.style.left = Math.round(left) + 'px';
+  TT.style.top = Math.round(top) + 'px';
+}
+
+function escondeTip() {
+  TT.classList.remove('on');
+  ttAtual = null;
 }
 
 document.addEventListener('mouseover', e => {
   const el = e.target.closest('[data-tip]');
-  if (el) ajustaTooltip(el);
+  if (el && el !== ttAtual) mostraTip(el);
 });
+document.addEventListener('mouseout', e => {
+  const el = e.target.closest('[data-tip]');
+  if (!el) return;
+  const para = e.relatedTarget;
+  if (!para || !el.contains(para)) escondeTip();
+});
+window.addEventListener('scroll', escondeTip, true);
+window.addEventListener('blur', escondeTip);
 
 // ==================== CONFIGURACOES ====================
 const CFG_PADRAO = {

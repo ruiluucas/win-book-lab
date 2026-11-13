@@ -49,31 +49,6 @@ main{padding:18px 24px 40px}
 .wbtn:hover{background:var(--panel2);color:var(--txt)}
 .wbtn.close:hover{background:var(--bad);color:#fff}
 
-/* ================= TOOLTIPS ================= */
-[data-tip]{position:relative}
-[data-tip]:hover::after{
-  content:attr(data-tip);
-  position:absolute; z-index:200; left:50%; top:calc(100% + 8px);
-  transform:translateX(-50%);
-  background:#1c2434; color:var(--txt);
-  border:1px solid #2e3a52; border-radius:7px;
-  padding:8px 11px; font-size:11px; font-weight:400; line-height:1.5;
-  letter-spacing:0; text-transform:none;
-  width:max-content; max-width:300px; white-space:normal;
-  box-shadow:0 8px 24px rgba(0,0,0,.55);
-  pointer-events:none;
-}
-/* icone de informacao */
-.info{
-  display:inline-grid;place-items:center;
-  width:13px;height:13px;border-radius:50%;
-  border:1px solid #3a465e;
-  color:var(--dim); font-size:9px; font-style:italic; font-weight:600;
-  cursor:help; vertical-align:middle; margin-left:3px;
-  transition:.15s; flex:none;
-}
-.info:hover{border-color:var(--accent);color:var(--accent)}
-
 /* ================= CARDS ================= */
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
   gap:12px;margin-bottom:14px}
@@ -236,17 +211,6 @@ h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;
 .ctl-msg.ok{color:var(--ok)} .ctl-msg.bad{color:var(--bad)}
 
 /* tooltip do header abre para baixo e fica centrado no botao */
-.tb-right [data-tip]:hover::after{top:calc(100% + 10px);max-width:260px}
-
-/* ================= TOOLTIP SEM VAZAR DA TELA ================= */
-/* o JS marca .tip-inv quando nao cabe a direita e .tip-up quando nao cabe embaixo */
-[data-tip].tip-inv:hover::after{
-  left:auto; right:0; transform:none;
-}
-[data-tip].tip-up:hover::after{
-  top:auto; bottom:calc(100% + 8px);
-}
-/* tooltip perto do topo abre para baixo; perto do rodape, para cima */
 
 /* ================= MODAL DE CONFIGURACOES ================= */
 .modal-fundo{
@@ -307,3 +271,19 @@ h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;
   border:1px solid rgba(240,180,41,.28);border-radius:7px;
   padding:9px 11px;margin-top:12px;line-height:1.5;
 }
+
+/* ================= TOOLTIP FLUTUANTE ================= */
+/* Elemento unico posicionado por JS. A versao com ::after vazava da tela: nao
+   dava para medir, e o clamp so cobria o lado direito — o card "snapshots hoje"
+   fica colado na esquerda e o texto era cortado. */
+#tt{
+  position:fixed; left:0; top:0; z-index:600;
+  background:#1c2434; color:var(--txt);
+  border:1px solid #2e3a52; border-radius:7px;
+  padding:8px 11px; font-size:11px; font-weight:400; line-height:1.5;
+  letter-spacing:0; text-transform:none;
+  max-width:300px; width:max-content;
+  box-shadow:0 8px 24px rgba(0,0,0,.55);
+  pointer-events:none; opacity:0; transition:opacity .1s;
+}
+#tt.on{opacity:1}
