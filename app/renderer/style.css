@@ -49,6 +49,21 @@ main{padding:18px 24px 40px}
 .wbtn:hover{background:var(--panel2);color:var(--txt)}
 .wbtn.close:hover{background:var(--bad);color:#fff}
 
+
+/* ================= ICONE DE INFORMACAO ================= */
+/* Vive fora da secao de tooltips de proposito: quando as regras do ::after
+   foram removidas, este bloco foi junto e os 15 icones sumiram da tela. */
+.info{
+  display:inline-grid; place-items:center;
+  width:13px; height:13px; flex:none;
+  border:1px solid #3a465e; border-radius:50%;
+  color:var(--dim); font-size:9px; font-style:italic; font-weight:600;
+  line-height:1; vertical-align:middle; margin-left:4px;
+  cursor:help; transition:.15s; user-select:none;
+}
+.info:hover{border-color:var(--accent); color:var(--accent);
+  background:rgba(79,140,255,.12)}
+
 /* ================= CARDS ================= */
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
   gap:12px;margin-bottom:14px}
