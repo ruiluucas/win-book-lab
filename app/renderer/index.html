@@ -2,106 +2,234 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';">
 <title>WIN Book Lab</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<header>
-  <div class="brand">
-    <span class="dot-logo"></span>
-    <h1>WIN Book Lab</h1>
-    <span class="sub" id="repo-path"></span>
+<!-- ================= TITLEBAR ================= -->
+<header class="titlebar">
+  <div class="tb-left">
+    <span class="logo"></span>
+    <span class="tb-title">WIN Book Lab</span>
+    <span class="tb-path" id="repo-path"></span>
   </div>
-  <div class="pills" id="pills">
+
+  <div class="tb-center">
     <span class="pill" data-k="mt5"><i></i>MT5</span>
     <span class="pill" data-k="bridge"><i></i>Ponte</span>
     <span class="pill" data-k="docker"><i></i>Banco</span>
     <span class="pill" data-k="collector"><i></i>Coletor</span>
   </div>
+
+  <div class="tb-right">
+    <button class="wbtn" id="w-min" title="Minimizar" aria-label="Minimizar">
+      <svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg>
+    </button>
+    <button class="wbtn" id="w-max" title="Maximizar" aria-label="Maximizar">
+      <svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx="1"/></svg>
+    </button>
+    <button class="wbtn close" id="w-close" title="Fechar" aria-label="Fechar">
+      <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg>
+    </button>
+  </div>
 </header>
 
 <main>
 
-  <!-- STATUS -->
+  <!-- ================= STATUS ================= -->
   <section class="cards">
     <div class="card" id="c-mt5">
-      <div class="card-top"><span class="lbl">MT5</span><span class="st ok-off" id="s-mt5">—</span></div>
+      <div class="card-top">
+        <span class="lbl">MT5
+          <span class="info" data-tip="MetaTrader 5. Precisa estar aberto pela GUI do Lutris — o CLI do Lutris está quebrado, então não dá para abrir por script.">i</span>
+        </span>
+        <span class="st ok-off" id="s-mt5">off</span>
+      </div>
       <div class="card-val" id="v-mt5">fechado</div>
       <div class="card-hint">GUI via Lutris</div>
     </div>
+
     <div class="card" id="c-bridge">
-      <div class="card-top"><span class="lbl">Ponte RPyC</span><span class="st ok-off" id="s-bridge">—</span></div>
+      <div class="card-top">
+        <span class="lbl">Ponte RPyC
+          <span class="info" data-tip="Ponte RPyC na porta 18812. É ela que leva comandos do Python até o MT5. Sem ela, não há book nem tick.">i</span>
+        </span>
+        <span class="st ok-off" id="s-bridge">off</span>
+      </div>
       <div class="card-val" id="v-bridge">off</div>
       <div class="card-hint">:18812</div>
     </div>
+
     <div class="card" id="c-docker">
-      <div class="card-top"><span class="lbl">Banco</span><span class="st ok-off" id="s-docker">—</span></div>
+      <div class="card-top">
+        <span class="lbl">Banco
+          <span class="info" data-tip="TimescaleDB em Docker na porta 5434. Hypertables: book (snapshots), tick (negócios) e book_delta_v2 (mudanças por preço).">i</span>
+        </span>
+        <span class="st ok-off" id="s-docker">off</span>
+      </div>
       <div class="card-val" id="v-docker">off</div>
       <div class="card-hint">TimescaleDB :5434</div>
     </div>
+
     <div class="card" id="c-collector">
-      <div class="card-top"><span class="lbl">Coletor</span><span class="st ok-off" id="s-collector">—</span></div>
+      <div class="card-top">
+        <span class="lbl">Coletor
+          <span class="info" data-tip="Processo coleta_v5.py. Lê o book a cada mudança e grava snapshot + delta por preço. Detecta o contrato WIN vigente automaticamente.">i</span>
+        </span>
+        <span class="st ok-off" id="s-collector">off</span>
+      </div>
       <div class="card-val" id="v-collector">parado</div>
       <div class="card-hint" id="h-collector">v5 · delta por preço</div>
     </div>
   </section>
 
-  <!-- CONTROLES -->
-  <section class="controls">
-    <button id="btn-start" class="btn primary">Ligar coleta</button>
-    <button id="btn-stop" class="btn danger">Parar</button>
-    <button id="btn-log" class="btn ghost">Abrir log</button>
-    <span class="msg" id="ctl-msg"></span>
+  <!-- ================= CONTROLES ================= -->
+  <section class="toolbar">
+    <button class="iconbtn primary" id="btn-start" data-tip="Ligar coleta — checa o MT5 e sobe banco, ponte e coletor">
+      <svg viewBox="0 0 16 16"><path d="M4 2.5l9 5.5-9 5.5z" fill="currentColor" stroke="none"/></svg>
+      <span>Ligar</span>
+    </button>
+    <button class="iconbtn danger" id="btn-stop" data-tip="Parar coleta — encerra o processo do coletor">
+      <svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1" fill="currentColor" stroke="none"/></svg>
+      <span>Parar</span>
+    </button>
+    <button class="iconbtn" id="btn-log" data-tip="Abrir a pasta dos logs no gerenciador de arquivos">
+      <svg viewBox="0 0 16 16"><path d="M2 4h4l1.5 2H14v7H2z"/></svg>
+      <span>Log</span>
+    </button>
+    <span class="ctl-msg msg" id="ctl-msg"></span>
   </section>
 
-  <!-- METRICAS -->
+  <!-- ================= GRAFICO + BOOK ================= -->
+  <section class="market">
+    <div class="panel chart-panel">
+      <div class="panel-head">
+        <h2>Preço
+          <span class="info" data-tip="Mid = (melhor bid + melhor ask) / 2, agregado por segundo. Candles de 5 s montados no cliente. Barras embaixo = volume negociado por segundo.">i</span>
+        </h2>
+        <div class="seg" id="tf">
+          <button data-min="5" class="on">5 min</button>
+          <button data-min="10">10 min</button>
+          <button data-min="30">30 min</button>
+        </div>
+      </div>
+      <div id="chart" class="chart"></div>
+    </div>
+
+    <div class="panel book-panel">
+      <div class="panel-head">
+        <h2>Book
+          <span class="info" data-tip="Último snapshot gravado: 5 níveis de cada lado. Barras = volume do nível. OBI = (Vbid − Vask) / (Vbid + Vask) somando os 5 níveis; positivo = pressão de compra.">i</span>
+        </h2>
+        <span class="spread" id="book-spread">—</span>
+      </div>
+
+      <div class="book">
+        <div class="bl colhead"><span>vol</span><span>preço</span></div>
+        <div class="ladder asks" id="asks"></div>
+        <div class="midline">
+          <span class="mid-price" id="book-mid">—</span>
+          <span class="obi-wrap"><span class="obi-lbl">OBI</span>
+            <span class="obi-val" id="book-obi">—</span></span>
+        </div>
+        <div class="ladder bids" id="bids"></div>
+        <div class="bl colhead"><span>vol</span><span>preço</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= METRICAS ================= -->
   <section class="metrics">
-    <div class="metric"><span class="m-lbl">snapshots hoje</span><span class="m-val" id="m-snap">—</span></div>
-    <div class="metric"><span class="m-lbl">linhas de book</span><span class="m-val" id="m-book">—</span></div>
-    <div class="metric"><span class="m-lbl">ticks hoje</span><span class="m-val" id="m-tick">—</span></div>
-    <div class="metric"><span class="m-lbl">deltas hoje</span><span class="m-val" id="m-delta">—</span></div>
-    <div class="metric"><span class="m-lbl">taxa (60 s)</span><span class="m-val" id="m-rate">—</span></div>
-    <div class="metric"><span class="m-lbl">ultima escrita</span><span class="m-val" id="m-last">—</span></div>
+    <div class="metric">
+      <span class="m-lbl">snapshots hoje
+        <span class="info" data-tip="Linhas distintas de timestamp na tabela book desde 00:00 — quantas vezes o book foi fotografado hoje.">i</span>
+      </span>
+      <span class="m-val" id="m-snap">—</span>
+    </div>
+    <div class="metric">
+      <span class="m-lbl">linhas de book
+        <span class="info" data-tip="Total de linhas na tabela book hoje. Cada snapshot gera ~10 linhas (5 níveis bid + 5 ask).">i</span>
+      </span>
+      <span class="m-val" id="m-book">—</span>
+    </div>
+    <div class="metric">
+      <span class="m-lbl">ticks hoje
+        <span class="info" data-tip="Negócios (trades) gravados hoje na tabela tick.">i</span>
+      </span>
+      <span class="m-val" id="m-tick">—</span>
+    </div>
+    <div class="metric">
+      <span class="m-lbl">deltas hoje
+        <span class="info" data-tip="Mudanças por preço em book_delta_v2. Cada alteração de volume num preço vira uma linha: add, cancel, novo ou saiu.">i</span>
+      </span>
+      <span class="m-val" id="m-delta">—</span>
+    </div>
+    <div class="metric">
+      <span class="m-lbl">taxa (60 s)
+        <span class="info" data-tip="Snapshots por segundo no último minuto. Se cair a zero, o coletor parou.">i</span>
+      </span>
+      <span class="m-val" id="m-rate">—</span>
+    </div>
+    <div class="metric">
+      <span class="m-lbl">última escrita
+        <span class="info" data-tip="Horário do snapshot mais recente no banco, em BRT. Atraso de mais de um minuto = coleta travada.">i</span>
+      </span>
+      <span class="m-val" id="m-last">—</span>
+    </div>
   </section>
 
-  <section class="chart-wrap">
-    <div class="chart-head"><span>snapshots / s</span><span id="chart-now" class="chart-now">—</span></div>
-    <canvas id="chart" height="90"></canvas>
-  </section>
-
+  <!-- ================= ANALISE + LOG ================= -->
   <div class="grid2">
-  <!-- ANALISE -->
-  <section class="panel">
-    <div class="panel-head">
-      <h2>Analise</h2>
-      <span class="hint">metodo novo usa tempo real + max_atraso; antigo usa linhas (preservado)</span>
-    </div>
-    <div class="form">
-      <label>inicio<input id="f-ini" value="2026-11-13 09:20"></label>
-      <label>fim<input id="f-fim" value="2026-11-13 10:40"></label>
-      <label>custo<input id="f-custo" type="number" step="0.5" value="7.5"></label>
-      <label>fator<input id="f-fator" type="number" step="1" value="2"></label>
-      <label class="chk"><input id="f-csv" type="checkbox"> usar fixture (sem banco)</label>
-    </div>
-    <div class="controls">
-      <button id="btn-tempo" class="btn primary">Rodar metodo novo</button>
-      <button id="btn-linhas" class="btn ghost">Rodar metodo antigo</button>
-      <span class="msg" id="an-msg"></span>
-    </div>
-    <pre id="an-out" class="out"></pre>
-  </section>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Análise
+          <span class="info" data-tip="Método novo: horizonte por TEMPO real, com max_atraso = 2× a mediana do intervalo da janela. Método antigo: horizonte por número de LINHAS (preservado para reproduzir os resultados de 13/11).">i</span>
+        </h2>
+      </div>
+      <div class="form">
+        <label>início<input id="f-ini" value="2026-11-13 09:20"></label>
+        <label>fim<input id="f-fim" value="2026-11-13 10:40"></label>
+        <label>custo
+          <span class="info" data-tip="Custo em pontos por round trip. Base 7,5, com sensibilidade obrigatória em 5 e 10.">i</span>
+          <input id="f-custo" type="number" step="0.5" value="7.5">
+        </label>
+        <label>fator
+          <span class="info" data-tip="Multiplicador do max_atraso sobre a mediana do intervalo: 1×, 2× (primário) ou 5×.">i</span>
+          <input id="f-fator" type="number" step="1" value="2">
+        </label>
+        <label class="chk"><input id="f-csv" type="checkbox"> usar fixture (sem banco)</label>
+      </div>
+      <div class="toolbar tight">
+        <button class="iconbtn primary" id="btn-tempo" data-tip="Rodar o método novo: horizonte por tempo real, com sensibilidade de custo e de atraso">
+          <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>
+          <span>Tempo</span>
+        </button>
+        <button class="iconbtn" id="btn-linhas" data-tip="Rodar o método antigo: horizonte por número de linhas (preserva os resultados históricos)">
+          <svg viewBox="0 0 16 16"><path d="M3 4h10M3 8h10M3 12h10"/></svg>
+          <span>Linhas</span>
+        </button>
+        <span class="msg" id="an-msg"></span>
+      </div>
+      <pre id="an-out" class="out"></pre>
+    </section>
 
-  <!-- LOG -->
-  <section class="panel">
-    <div class="panel-head"><h2>Log de coleta</h2><button id="btn-refresh-log" class="btn ghost sm">atualizar</button></div>
-    <pre id="log-out" class="out log"></pre>
-  </section>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Log de coleta</h2>
+        <button class="iconbtn sm" id="btn-refresh-log" data-tip="Recarregar o log">
+          <svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.6"/><path d="M13 2v3.5H9.5"/></svg>
+        </button>
+      </div>
+      <pre id="log-out" class="out log"></pre>
+    </section>
   </div>
 
 </main>
 
+<script src="vendor/lightweight-charts.standalone.production.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

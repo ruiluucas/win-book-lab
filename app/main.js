@@ -2,11 +2,15 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const lab = require('./lib/lab');
 
+let win = null;
+
 function createWindow() {
-  const win = new BrowserWindow({
-    width: 1500, height: 1000, minWidth: 980, minHeight: 660,
+  win = new BrowserWindow({
+    width: 1500, height: 1000, minWidth: 1000, minHeight: 680,
     backgroundColor: '#0b0e14',
     title: 'WIN Book Lab',
+    frame: false,               // titlebar propria
+    titleBarStyle: 'hidden',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -15,18 +19,32 @@ function createWindow() {
     },
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
+  // mantem o estado do botao maximizar sincronizado
+  const sendState = () => win.webContents.send('win-state', win.isMaximized());
+  win.on('maximize', () => sendState());
+  win.on('unmaximize', () => sendState());
   return win;
 }
 
-ipcMain.handle('status',    () => lab.getStatus());
-ipcMain.handle('dbstats',   () => lab.dbStats());
-ipcMain.handle('start',     () => lab.startCollection());
-ipcMain.handle('stop',      () => lab.stopCollection());
-ipcMain.handle('analysis',  (_e, m, o) => lab.runAnalysis(m, o));
-ipcMain.handle('logtail',   () => lab.tailLog());
-ipcMain.handle('listlogs',  () => lab.listLogs());
-ipcMain.handle('openlog',   () => shell.showItemInFolder(path.join(lab.LOG_DIR, 'coleta_auto.log')));
-ipcMain.handle('repo',      () => lab.REPO);
+// ---------- IPC ----------
+ipcMain.handle('status',   () => lab.getStatus());
+ipcMain.handle('dbstats',  () => lab.dbStats());
+ipcMain.handle('book',     () => lab.getBook());
+ipcMain.handle('series',   (_e, min) => lab.getSeries(min));
+ipcMain.handle('start',    () => lab.startCollection());
+ipcMain.handle('stop',     () => lab.stopCollection());
+ipcMain.handle('analysis', (_e, m, o) => lab.runAnalysis(m, o));
+ipcMain.handle('logtail',  () => lab.tailLog());
+ipcMain.handle('listlogs', () => lab.listLogs());
+ipcMain.handle('openlog',  () => shell.showItemInFolder(path.join(lab.LOG_DIR, 'coleta_auto.log')));
+ipcMain.handle('repo',     () => lab.REPO);
+
+// controles da janela
+ipcMain.on('win-min',   () => win && win.minimize());
+ipcMain.on('win-max',   () => { if (!win) return; win.isMaximized() ? win.unmaximize() : win.maximize(); });
+ipcMain.on('win-close', () => win && win.close());
+ipcMain.handle('win-is-max', () => (win ? win.isMaximized() : false));
 
 app.whenReady().then(() => {
   createWindow();

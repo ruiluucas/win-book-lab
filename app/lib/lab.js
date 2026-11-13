@@ -118,7 +118,75 @@ function listLogs() {
   }));
 }
 
+
+// ---------- BOOK AO VIVO ----------
+const SQL_BOOK = `
+WITH u AS (SELECT max(ts) t FROM book WHERE ts >= now() - interval '5 minutes')
+SELECT b.lado, b.nivel, b.preco, b.volume
+FROM book b, u WHERE b.ts = u.t
+ORDER BY b.lado DESC, b.nivel;
+`;
+
+async function getBook() {
+  const r = await run('docker', ['exec', 'mercado-db', 'psql', '-U', 'postgres',
+    '-d', 'mercado', '-t', '-A', '-F', '|', '-c', SQL_BOOK]);
+  if (!r.ok) return { erro: r.err.split('\n')[0] || 'banco indisponivel' };
+  const bids = [], asks = [];
+  for (const ln of r.out.split('\n')) {
+    if (!ln) continue;
+    const [lado, nivel, preco, volume] = ln.split('|');
+    const item = { nivel: +nivel, preco: +preco, volume: +volume };
+    if (lado === '2') bids.push(item); else asks.push(item);
+  }
+  if (!bids.length || !asks.length) return { erro: 'sem book recente' };
+  const bid = bids[0].preco, ask = asks[0].preco;
+  const vb = bids.reduce((a, x) => a + x.volume, 0);
+  const va = asks.reduce((a, x) => a + x.volume, 0);
+  return {
+    bids, asks,
+    bid, ask,
+    mid: (bid + ask) / 2,
+    spread: ask - bid,
+    // OBI dos 5 niveis: (Vbid - Vask) / (Vbid + Vask)
+    obi: (vb - va) / (vb + va),
+    vbid: vb, vask: va,
+  };
+}
+
+// ---------- SERIE PARA O GRAFICO ----------
+function sqlSerie(min) {
+  return `
+WITH b AS (
+  SELECT date_trunc('second', ts) t,
+    (max(CASE WHEN lado=2 THEN preco END) + min(CASE WHEN lado=1 THEN preco END)) / 2.0 AS mid
+  FROM book WHERE ts >= now() - interval '${min} minutes' GROUP BY 1
+),
+v AS (
+  SELECT date_trunc('second', ts) t, sum(volume) vol
+  FROM tick WHERE ts >= now() - interval '${min} minutes' GROUP BY 1
+)
+SELECT extract(epoch FROM b.t)::bigint AS ts, round(b.mid::numeric,1) AS mid, COALESCE(v.vol,0) AS vol
+FROM b LEFT JOIN v ON b.t = v.t ORDER BY b.t;
+`;
+}
+
+async function getSeries(min = 10) {
+  const m = Math.max(1, Math.min(120, parseInt(min, 10) || 10));  // clamp, sem injecao
+  const r = await run('docker', ['exec', 'mercado-db', 'psql', '-U', 'postgres',
+    '-d', 'mercado', '-t', '-A', '-F', '|', '-c', sqlSerie(m)]);
+  if (!r.ok) return { erro: r.err.split('\n')[0] || 'banco indisponivel', pontos: [] };
+  const pontos = [];
+  for (const ln of r.out.split('\n')) {
+    if (!ln) continue;
+    const [ts, mid, vol] = ln.split('|');
+    if (!ts || !mid) continue;
+    pontos.push({ ts: +ts * 1000, mid: +mid, vol: +vol });
+  }
+  return { pontos, minutos: m };
+}
+
 module.exports = {
   REPO, VENV_PY, LOG_DIR, DSN, run,
   getStatus, dbStats, startCollection, stopCollection, runAnalysis, tailLog, listLogs,
+  getBook, getSeries,
 };
