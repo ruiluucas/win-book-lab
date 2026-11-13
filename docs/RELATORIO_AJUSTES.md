@@ -189,3 +189,66 @@ marcada como suspeita** e não entra em análise. Só o que passou em P0.5 é us
    (1–10 min) podem estar além do ponto onde o efeito morre.
 6. **Custo real de 7,5 pts.** A premissa de 5 pts substituída por 7,5 (spread 5 +
    corretagem 2,5) é **teórica**, não medida em nota de corretagem desta série.
+
+---
+
+# Rodada 2 — revisão de documentação (13/11/2026)
+
+**Escopo:** somente documentação. **Nenhum código, infraestrutura ou resultado
+experimental foi alterado nesta rodada.**
+
+## Arquivos alterados
+
+| arquivo | mudança |
+|---|---|
+| `README.md` | reescrito: porta de entrada, status honesto, meta-labeling corrigido, "tick a tick" corrigido |
+| `docs/VERSOES.md` | **novo** — tabela de versões dos coletores |
+| `docs/METODOLOGIA.md` | **novo** — sobreposição, Holm, poder, sessões, regimes, estabilidade |
+| `docs/FEATURES.md` | **novo** — OFI clássico vs variação de volume, comparativo, limite de resolução |
+| `docs/EXECUCAO.md` | **novo** — custo, mid-to-mid vs executável, latência, cenários hipotéticos |
+| `docs/LIMITACOES.md` | **novo** — lista única de limitações |
+| `docs/PROTOCOLO.md` | corrigido: primária fora do Holm, OFI clássico, janela 1 s, sessões |
+| `docs/REFERENCIAS_AUDITORIA.md` | reescrito: conceito usado + reprodução vs adaptação |
+| `docs/INFRAESTRUTURA.md` | reescrito: qual coletor ativo, 10 armadilhas, rolagem |
+| `docs/MEDICOES.md` | nomenclatura do delta + aviso de amostra queimada |
+| `docs/HISTORICO.md` | inalterado (já marcava os resultados superados) |
+
+## Contradições encontradas e resolução
+
+| # | contradição | resolução |
+|---|---|---|
+| 1 | README citava `coleta_v4`; havia v5 rodando | `VERSOES.md` é a **fonte única**; README aponta para ela |
+| 2 | "captura 100% das mudanças" no README vs "não verificado" na seção de auditoria | removido; substituído por "~8,3–8,5 snap/s em mercado calmo, **NÃO VERIFICADO** em rajada" |
+| 3 | "~97% churn" vs "25%" | o 97% era artefato do delta por nível; ambos documentados em `HISTORICO.md` |
+| 4 | "tick histórico não existe" vs uso de `time_msc` | esclarecido: `time_msc` vem do `symbol_info_tick` ao vivo, não de histórico |
+| 5 | "cancel" usado como evento observado | renomeado para `volume_decrease`; inferência separada e rotulada |
+| 6 | "meta-labeling" para um filtro de regime | seção própria dizendo que **não está implementado** |
+| 7 | INFRAESTRUTURA: ticks/dia 4,0 M vs 350 mil | corrigido para 350 mil (10–19 ticks/s × 9 h) |
+| 8 | INFRAESTRUTURA: 9 GB/ano vs 4 GB/ano | corrigido com a fórmula explícita |
+| 9 | "captura tick a tick" | corrigido para "polling do book + último tick observado" |
+| 10 | OFI tratado como uma coisa só | separado em `OFI_top_classic` e `OFI_top_volume` |
+
+## Informações que continuam NÃO VERIFICADAS
+
+1. Taxa de mudança do book em **rajada** (abertura, evento macro)
+2. **Flags de agressor** — impossíveis nesta conta
+3. **Offset servidor−local** por sessão (declarado ±3 ms por derivação, não medido)
+4. **Latência ponta a ponta** (etapas servidor→MT5, decisão, corretora→B3)
+5. **Custo de 7,5 pts** — teórico (spread medido + corretagem de outra série)
+6. **Data de vencimento do WINZ26** no calendário da B3
+7. **4 referências** (Baldo, Grądzki, Kili, Bhand & Joshi)
+8. **Decaimento do sinal em segundos** (P1.6 da rodada 1)
+9. **Funciona `OnBookEvent` sob Proton/Wine** nesta conta (captura por evento, P3)
+
+## Confirmação: hipóteses e resultados não foram alterados
+
+- Hipótese primária: **OFI_top_classic**, α=0,05, 20 sessões
+- Custos: **7,5 pts** base, sensibilidade 5/10
+- Critério estatístico: **amostragem sem sobreposição**, Holm nas secundárias
+- Resultados experimentais: **inalterados** (50,0% e p=0,98 em h=3 min; 1248/1248 no
+  teste de ida-e-volta)
+
+**A única mudança de hipótese nesta rodada** foi a **janela da feature primária**
+(250 ms → 1 s), motivada por uma limitação física já documentada: com ~8,5 snapshots/s,
+250 ms contém ~2 observações. Isso está registrado aqui e no `PROTOCOLO.md` para o
+auditor decidir se aceita.

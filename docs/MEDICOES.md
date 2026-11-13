@@ -1,3 +1,6 @@
+> **Números brutos do dia 13/11/2026.** Vários foram corrigidos depois — ver
+> [`RELATORIO_AJUSTES.md`](RELATORIO_AJUSTES.md). Amostra **exploratória e queimada**.
+
 # Medições brutas — 13/11/2026, WINZ26
 
 Todas as medições deste dia, com amostra e horário. Nada aqui é conclusivo:
@@ -11,7 +14,7 @@ a amostra é de **1 sessão parcial**.
 | linhas de `book_delta` | 56,9/s | |
 | ticks | 12,4/s | |
 
-Book muda a 8,8/s → captura de **100%**.
+Book muda a 8,8/s em mercado calmo. Captura de **100%** era afirmação circular — **NÃO VERIFICADO** em rajada.
 
 ## Progressão das versões do coletor
 
@@ -20,7 +23,7 @@ Book muda a 8,8/s → captura de **100%**.
 | v2, intervalo 100 ms | 4,2 | 47% | perda ~52% |
 | v2, 40 ms | 5,1 | 58% | |
 | v2, 20 ms | 6,1 | 69% | latência da ponte é o piso |
-| **v3/v4, 2 threads** | **8,0–9,1** | **91–100%** | 2 conexões RPyC |
+| **v3/v4, 2 threads** | **8,0–9,1** | **91–100% do observado** (não é teto) | 2 conexões RPyC |
 
 Latência medida: `symbol_info_tick` 40,9 ms · `market_book_get` 45,7–48,2 ms.
 
@@ -54,12 +57,12 @@ acerto 54,9%, t=4,01 — artefato da sobreposição.
 
 | lado | evento | n | soma |
 |---|---|---:|---:|
-| BID | add | 505 | +46.051 |
-| BID | cancel | 399 | −44.486 |
-| ASK | add | 511 | +18.975 |
-| ASK | cancel | 373 | −18.944 |
+| BID | volume_increase | 505 | +46.051 |
+| BID | volume_decrease | 399 | −44.486 |
+| ASK | volume_increase | 511 | +18.975 |
+| ASK | volume_decrease | 373 | −18.944 |
 
-**Líquido: BID +1.565, ASK +31.** ~97% do volume do book é churn.
+**Líquido: BID +1.565, ASK +31.** ~25% da movimentação é churn (corrigido).
 
 ## Storage
 

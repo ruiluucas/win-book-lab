@@ -1,19 +1,42 @@
 # Auditoria de referências
 
-| referência | afirmação no README | status | evidência |
+Regra: **número de fonte não verificada não entra em documento como fato.**
+
+## Confirmadas
+
+| referência | verificação | conceito efetivamente usado | reprodução ou adaptação |
 |---|---|---|---|
-| López de Prado (2018) | triple-barrier, purged CV, sample weights | **confirmado** | ISBN 9781119482086; TOC via Google Books |
-| Sirignano & Cont (2019) | features de book carregam informação | **confirmado** | DOI 10.1080/14697688.2019.1571683; arXiv 1803.06917 |
-| Ait-Sahalia, Mykland & Zhang (2005) | ruído de microestrutura limita amostragem | **confirmado**, mas **mal aplicado antes** | RFS 18(2):351–416. É sobre volatilidade, não direção |
-| Cont, Kukanov & Stoikov (2014) | OFI | **confirmado** | JFE 12(1):47–88 |
-| Gu, Kelly & Xiu (2020) | "teto de R² para tick" | **CONTRAZ** | R² é de retorno mensal cross-section. Removido como teto |
-| Baldo, Morais & Silva (2026), ENEGEP | ROC 0,50–0,65 no WIN | **não confirmado** | números removidos |
-| Grądzki et al. (2025) | triple barrier positivo após custos | **não confirmado** | números removidos |
-| Kili et al. (2025) | Sharpe AEDL/FH/TB | **não confirmado** | números removidos |
-| Bhand & Joshi (2026) | vazamento infla Sharpe no XGBoost | **não confirmado** | se existir, é preprint |
+| **López de Prado (2018)**, *Advances in Financial Machine Learning*, Wiley, ISBN 9781119482086 | TOC verificado (Google Books) | triple-barrier (cap.3), sample weights por unicidade (cap.4), purged K-fold com embargo (cap.7), CPCV (cap.12) | **adaptação** — não replico os exemplos dele; aplico o método ao WIN |
+| **Cont, Kukanov & Stoikov (2014)**, "The Price Impact of Order Book Events", *J. Financial Econometrics* 12(1):47–88 | DOI/veículo/páginas checados | definição de **OFI** (order flow imbalance) | **adaptação** — o artigo usa book de futuros de ações; aplico ao WIN com 5 níveis |
+| **Sirignano & Cont (2019)**, "Universal features of price formation", *Quantitative Finance* 19(9):1449–1459, DOI 10.1080/14697688.2019.1571683 | DOI/veículo/páginas checados | features de book (profundidade, desequilíbrio) carregam informação | **adaptação** — eles usam book L2 de **ações americanas** (NASDAQ); o WIN tem 5 níveis. **Não afirmam** que features de fita sejam inferiores — essa extrapolação foi removida do README |
+| **Ait-Sahalia, Mykland & Zhang (2005)**, "How Often to Sample a Continuous-Time Process...", *RFS* 18(2):351–416 | DOI/veículo/páginas checados | frequência ótima de amostragem sob ruído de microestrutura **para estimar volatilidade** | **não aplicado diretamente** — o artigo trata de **estimação de volatilidade**, não de previsão direcional. A frase "amostrar mais fino piora o SNR de previsão" era minha extrapolação e foi **removida** |
 
-## Regra adotada
+## NÃO VERIFICADAS — números removidos dos documentos
 
-Número de fonte não verificada **não entra no README como se fosse fato**. Se a fonte
-não puder ser confirmada por DOI/veículo/páginas, o número sai e a referência fica
-marcada como não confirmada.
+| referência | o que se atribuía a ela | status |
+|---|---|---|
+| Baldo, Morais & Silva (2026), ENEGEP/ABEPRO | "ROC 0,50–0,65 no WIN/WDO" | **NÃO VERIFICADO** — DOI/URL não confirmados |
+| Grądzki, Wójcik & Lessmann (2025), *Financial Innovation* 11 | "triple barrier positivo após custos" | **NÃO VERIFICADO** |
+| Kili et al. (2025), *Applied Sciences* 15(24):13204 | "Sharpe AEDL 0,48 / FH −0,29 / TB −0,03" | **NÃO VERIFICADO** |
+| Bhand & Joshi (2026), Research Square | "vazamento infla Sharpe no XGBoost" | **NÃO VERIFICADO** — se existir, é **preprint sem revisão por pares** |
+
+**Ação tomada:** todos os números dessas quatro fontes foram **removidos** de `README.md`,
+`MEDICOES.md` e demais documentos. Elas podem ser citadas apenas como pista de leitura,
+nunca como fundamento numérico.
+
+## Referência removida como "teto"
+
+**Gu, Kelly & Xiu (2020)**, "Empirical Asset Pricing via Machine Learning", *RFS* 33(5).
+Referência **real e verificada**, mas estava **mal usada**: o R²_oos de 0,34–0,40% é de
+**retornos mensais em cross-section de ações**, não um teto para tick intradiário de um
+futuro. **Removida como teto.** Pode voltar se o projeto migrar para cross-section.
+
+## Como reproduzir a verificação
+
+```bash
+# DOI resolve?
+curl -sI https://doi.org/10.1080/14697688.2019.1571683 | head -1
+```
+
+Para as não verificadas, a tentativa de resolução de DOI **falhou** ou o veículo não pôde
+ser confirmado.

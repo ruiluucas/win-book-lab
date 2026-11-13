@@ -1,168 +1,200 @@
 # WIN Book Lab — captura e análise de microestrutura do mini-índice B3
 
-Captura **tick a tick** do book de ofertas do WIN (mini-índice da B3) via MetaTrader 5,
-com **delta por nível**, e mede se isso tem poder preditivo.
+Polling do book de ofertas e dos negócios do WIN (mini-índice da B3) via MetaTrader 5,
+com delta por nível de preço, e medição de poder preditivo.
 
-**Status em 13/11/2026:** infraestrutura **em validação**. Nenhum edge demonstrado.
+> **Estado do projeto (13/11/2026): infraestrutura em validação. Nenhum edge demonstrado.**
+>
+> A amostra coletada em 13/11 é **exploratória e está queimada** — não será reutilizada
+> como confirmação. O protocolo de confirmação está em [`docs/PROTOCOLO.md`](docs/PROTOCOLO.md),
+> congelado antes de olhar dados novos.
 
-> A amostra de 80 min coletada neste dia é **exploratória e está queimada** — não será
-> reutilizada como confirmação. O protocolo de confirmação está em
-> [`docs/PROTOCOLO.md`](docs/PROTOCOLO.md) e foi congelado **antes** de olhar dados novos.
-
-A taxa de captura de 100% que constava aqui **não foi verificada** de forma independente:
-foi medida com o mesmo polling que se queria validar (circular). O verificado é que o
-coletor grava ~8,3 snapshots/s em mercado calmo, sem duplicatas e com 10 linhas por
-snapshot.
-
-> Este repositório foi escrito para ser **auditado**. A seção
-> [O que auditar](#o-que-auditar) lista as afirmações que precisam de verificação
-> independente, e a seção [Limitações](#limitações-conhecidas) lista o que este trabalho
-> **não** prova.
+**Este repositório foi escrito para ser auditado.** Cada afirmação aponta para o script
+ou documento que a sustenta. O que não foi verificado está marcado **NÃO VERIFICADO**.
 
 ---
 
-## 1. O problema
+## 1. O que este laboratório faz
 
-Trader individual na B3, WIN futuro, 1 contrato, custo de **R$ 0,50 por round trip**
-(RLP ativo na BTG). Stop operacional de 180 pts = R$ 36. Capital R$ 800.
+| faz | não faz |
+|---|---|
+| captura o book (5 níveis/lado) por **polling** | não recebe eventos empurrados pelo servidor |
+| captura os negócios (último tick observado) | não reconstrói a fita completa |
+| calcula delta por nível de preço | não distingue execução de cancelamento diretamente |
+| mede informação preditiva de features de book | não executa ordens (somente leitura) |
+| versiona o método e as limitações | não promete retorno |
 
-O custo em pontos é **7,5 pts**: 5 de spread (comprar no ask, vender no bid) mais 2,5
-de corretagem (R$ 0,50 ÷ R$ 0,20/pt). A pergunta que importa não é "o preço vai subir?", é:
+**Precisão sobre o termo "tick a tick":** não há captura tick a tick. O coletor faz
+**polling** do book e lê o **último tick observado**. Entre duas leituras podem ocorrer
+negócios não vistos. Ver [`docs/LIMITACOES.md`](docs/LIMITACOES.md).
 
-> **existe algum conjunto de operações onde o movimento esperado cobre custo + prêmio de risco?**
+## 2. Por que book
 
-Isso é diferente de prever direção. É **selecionar** operações. A literatura chama de
-*meta-labeling* (López de Prado, 2018, cap. 3).
+Duas fontes de dado distintas:
 
-## 2. Por que book e não fita
-
-"Fita" (*tape*) é o registro de negócios fechados: preço, volume, hora.
-"Book" é a fila de ordens em aberto: quem quer comprar/vender e a quanto.
-
-| | fita | book |
+| | fita (tape) | book (livro) |
 |---|---|---|
-| o que é | negócios **fechados** | ordens **paradas** |
+| o que é | negócios **fechados** | ordens **em aberto** |
 | diz | "negociou 5 a 174.000" | "227 querem vender a 174.010" |
-| no MT5 | `copy_ticks_*`, `symbol_info_tick` | `market_book_get` |
+| no MT5 | `symbol_info_tick` | `market_book_get` |
 
-**Sirignano & Cont (2019)** mostram que as features com poder preditivo em dados de tick
-são de **book** — profundidade e desequilíbrio. Features derivadas de fita (velocidade,
-spread) são mais fracas. Este projeto parte dessa premissa.
+O projeto investiga features de book porque elas descrevem **intenção** (ordens paradas),
+não apenas resultado (negócios fechados). Se essa premissa é correta para o WIN é
+exatamente o que o laboratório quer medir — **não é uma conclusão**.
 
 ## 3. Arquitetura
 
 ```
-MT5 (BTG)  →  ponte RPyC :18812  →  coletor (2 threads)  →  TimescaleDB :5434
-Lutris/Proton         mt5server.exe     Python/asyncio        PostgreSQL 16
+MT5 (BTG, Lutris/Proton)
+        │
+        ▼
+ponte RPyC 127.0.0.1:18812  (mt5server.exe dentro do prefixo do MT5)
+        │
+        ▼
+coletor v5  (2 threads, 2 conexões RPyC independentes)
+        │
+        ▼
+TimescaleDB 127.0.0.1:5434  (tick · book · book_delta_v2)
 ```
 
-### Componentes
-
-| peça | arquivo | papel |
+| componente | arquivo | estado |
 |---|---|---|
-| schema do banco | `sql/schema_v2.sql` | 3 hypertables: `tick`, `book`, `book_delta` |
-| coletor | `scripts/coleta_v4.py` | 2 threads + 2 conexões RPyC |
-| analisador | `scripts/analisa_book_db.py` | correlação, acerto, P&L com Newey-West |
-| régua estrita | `scripts/book_estrito.py` | só observações **não sobrepostas** |
-| didático | `scripts/explica.py` | abre o capô: dado cru → cálculo → decisão → resultado |
+| schema | [`sql/schema_v2.sql`](sql/schema_v2.sql) | ativo |
+| coletor | [`scripts/coleta_v5.py`](scripts/coleta_v5.py) | **ativo** |
+| invariantes | [`scripts/verifica_integridade.py`](scripts/verifica_integridade.py) | ativo |
+| prova do delta | [`scripts/testa_ida_volta.py`](scripts/testa_ida_volta.py) | ativo |
+| análise | [`scripts/analisa_book_db.py`](scripts/analisa_book_db.py) | ativo |
+| régua estrita | [`scripts/book_estrito.py`](scripts/book_estrito.py) | ativo |
+| didático | [`scripts/explica.py`](scripts/explica.py) | ativo |
 
-### Por que duas threads
-
-Medido: `symbol_info_tick` leva **41 ms** e `market_book_get` leva **48 ms** pela ponte.
-Na mesma thread, um ciclo completo são 89 ms → 11 ciclos/s. Com `sleep` cai para 6/s.
-Mas o book muda **8,8 vezes/s** — ou seja, 30% das atualizações eram perdidas.
-
-Com duas conexões RPyC independentes, cada uma faz a sua chamada em paralelo:
-
-| versão | snapshots/s | % do teto |
-|---|---:|---:|
-| v2 (uma thread) | 4,13 | 47% |
-| **v4 (duas threads)** | **8,0–9,1** | **91–100%** |
+Histórico de versões do coletor: [`docs/VERSOES.md`](docs/VERSOES.md).
 
 ## 4. O dado
 
 ### Tabelas
 
-**`book`** — snapshot completo, 10 linhas por instante (5 níveis × 2 lados):
+**`book`** — snapshot do estado, 10 linhas por leitura (5 níveis × 2 lados):
 
 | coluna | tipo | significado |
 |---|---|---|
-| `ts` | timestamptz | hora do **servidor** (BRT, GMT-3) |
-| `symbol` | text | sempre `WINZ26` (guard: só aceita `WIN*`) |
-| `lado` | smallint | 1 = SELL (ask), 2 = BUY (bid) |
+| `ts` | timestamptz | **relógio local no recebimento** (não é timestamp do servidor) |
+| `symbol` | text | `WINZ26` (guard: só aceita `WIN*`) |
+| `lado` | smallint | 1 = ask (venda), 2 = bid (compra) |
 | `nivel` | smallint | 0 = melhor preço do lado |
-| `preco` | float | |
-| `volume` | float | contratos parados no nível |
+| `preco` | **integer** | pontos (grade de 5) |
+| `volume` | **integer** | contratos |
 
-**`book_delta`** — só o que mudou desde o snapshot anterior:
+**`book_delta_v2`** — diferença entre leituras consecutivas, **chaveada por preço**:
 
 | coluna | significado |
 |---|---|
-| `vol_antes` / `vol_agora` | volume no nível antes e depois |
-| `delta` | `vol_agora - vol_antes` (positivo = ordem entrou) |
-| `evento` | `novo` · `saiu` · `add` · `cancel` |
+| `vol_antes` / `vol_agora` | volume no mesmo preço, antes e depois |
+| `delta` | `vol_agora − vol_antes` |
+| `evento` | `volume_increase` · `volume_decrease` · `price_entered_window` · `price_left_window` |
 
-**`tick`** — a fita: `ts, symbol, time_msc, bid, ask, last, volume`
+Ver [§6](#6-nomenclatura-do-delta--o-que-é-observado-e-o-que-é-inferido): a mudança de
+volume **não é** observada como cancelamento ou execução.
 
-### Volume medido
+**`tick`** — negócios observados: `ts, symbol, time_msc, bid, ask, last, volume, lado_inferido, t_recv_ns`
 
-Mercado calmo (WINZ26, 13/11/2026):
+## 5. Como o dado é obtido
 
-| fluxo | taxa | projeção 9 h |
-|---|---:|---:|
-| snapshots do book | 8,0–9,1 /s | ~1,8 M snapshots |
-| linhas de `book` | ~90 /s | ~2,5 M linhas/dia |
-| linhas de `book_delta` | ~57 /s | ~1,8 M linhas/dia |
-| ticks | 10–12 /s | ~350 mil/dia |
+### Por que duas threads
 
-**Compressão medida:** `book` 104,8 → **7,6 bytes/linha** (92,7% de redução);
-`tick` 191,0 → **16,2 bytes/linha** (91,4%).
-Projeção consolidada: **~4 GB/ano** comprimido.
+Medido com o MT5 ativo:
 
-## 5. Metodologia de medição
+| operação | latência |
+|---|---|
+| `symbol_info_tick` | 6–41 ms (varia com a carga do MT5) |
+| `market_book_get` | 6–48 ms |
 
-### A régua de honestidade
+Na mesma thread, um ciclo serializado limita a taxa. Com duas **conexões RPyC
+independentes**, cada chamada corre em paralelo. Métricas por versão em
+[`docs/VERSOES.md`](docs/VERSOES.md).
 
-O erro mais fácil de cometer aqui: tratar observações sobrepostas como independentes.
+### Taxa observada
 
-Se o horizonte é 3 min e a coleta é a cada 175 ms, cada evento de 3 min contém
-**1.030 snapshots sobrepostos**. Usar todos infla o t-stat artificialmente.
+| fluxo | taxa | nota |
+|---|---:|---|
+| snapshots do book | **8,3–8,5 /s** | mercado calmo, 13/11 |
+| linhas de `book_delta_v2` | ~57 /s | |
+| negócios (ticks) | 10–19 /s | variou 1,9× no mesmo dia |
 
-**Exemplo real deste projeto:**
+**NÃO VERIFICADO:** a taxa em rajada (abertura, evento macro). 8,5/s é taxa de mercado
+calmo, medida com o mesmo polling que se quer validar — **é circular**, e não é teto.
+
+### O que o MT5 entrega
+
+| item | valor | evidência |
+|---|---|---|
+| `ticks_bookdepth` do WIN | **5 níveis por lado** | `symbol_info` |
+| ordem dos preços | **pior preço primeiro** | melhor bid = `max`, melhor ask = `min` |
+| `market_book_get` logo após `add` | **0 entradas** por ~1 s | precisa esperar |
+| tipos no book | só 1 (ask) e 2 (bid) | 3 e 4 (market) não aparecem |
+| **histórico de tick** | **não existe** | `copy_ticks_*` = 0 em 1/5/15/60 min, `last_error = Success` |
+| `time` do MT5 | hora do **servidor** (GMT-3) | não é UTC |
+| flags de agressor | **não obteníveis** | consequência do item acima |
+
+## 6. Nomenclatura do delta — o que é observado e o que é inferido
+
+Este é o ponto mais fácil de errar num projeto de book. **Snapshots não são eventos.**
+
+| evento | o que é | o que **não** é |
+|---|---|---|
+| `volume_increase` | volume no mesmo preço aumentou | não sabemos se é uma ordem nova ou ampliação |
+| `volume_decrease` | volume no mesmo preço diminuiu | **não sabemos** se foi execução, cancelamento ou modificação |
+| `price_entered_window` | o preço apareceu na janela de 5 níveis | **não é ordem nova** — o preço pode ter entrado na janela visível |
+| `price_left_window` | o preço saiu da janela visível | **não é cancelamento** |
+
+**O que a decomposição permitiu estimar:** cruzando `volume_decrease` com os negócios do
+mesmo período, **~1,7% do churn é compatível com execução** e o resto seria cancelamento.
+Isso é uma **estimativa**, não uma observação — depende da regra do tick e da janela.
+Detalhes e as três tentativas (com dois erros meus) em
+[`docs/RELATORIO_AJUSTES.md`](docs/RELATORIO_AJUSTES.md#p02--cancel-não-é-cancel).
+
+**Nomes no código:** a tabela usa `vol_up`/`vol_down`/`entrou_janela`/`saiu_janela`.
+O mapeamento para a nomenclatura acima é 1:1 e será unificado na próxima migração de
+schema — **não alterado nesta rodada** por ser código, não documentação.
+
+## 7. Features
+
+Comparativo completo em [`docs/FEATURES.md`](docs/FEATURES.md). Resumo:
+
+| feature | o que investiga |
+|---|---|
+| `OBI_1` | desequilíbrio no melhor nível |
+| `OBI_5` | desequilíbrio nos 5 níveis |
+| `OFI_top_classic` | fluxo de ordens no topo (Cont, Kukanov & Stoikov, 2014) |
+| `OFI_top_volume` | variação agregada de volume no topo (mais simples, não é OFI) |
+| `microprice − mid` | pressão implícita no melhor nível |
+| `spread` | custo de transação contemporâneo |
+
+**Limite de resolução:** com ~8,5 snapshots/s, uma janela de 250 ms contém **~2
+observações**. Qualquer feature calculada nessa janela tem resolução de 2 pontos —
+isso é uma limitação física do polling, não do cálculo.
+
+## 8. Metodologia
+
+Detalhes em [`docs/METODOLOGIA.md`](docs/METODOLOGIA.md). O essencial:
+
+**O erro mais fácil:** tratar observações sobrepostas como independentes. Se o horizonte é
+3 min e a coleta é a 120 ms, cada evento contém ~1.500 leituras do mesmo movimento.
+
+Prova concreta neste projeto:
 
 | método | acerto | t | p | veredito |
 |---|---:|---:|---:|---|
 | todas as obs + Newey-West | 54,9% | 4,01 | 0,0001 | "edge!" ❌ |
 | **só obs independentes (n=26)** | **50,0%** | **0,03** | **0,98** | **ruído** ✅ |
 
-**O motivo técnico:** HAC (Newey-West) só é válido com largura de banda **≥ o
-comprimento da sobreposição em observações** — ~1.030 para h=3 min a 175 ms. Com
-n = 20 mil isso é inviável, e o lag padrão **subestima** o erro-padrão.
+**Régua primária:** amostragem sem sobreposição. O Newey-West só é válido com largura de
+banda ≥ o comprimento da sobreposição em observações (~1.500 aqui) — inviável.
 
-Régua primária: **amostragem sem sobreposição**. Complementos: sub-amostragem com vários
-offsets (reportando média e dispersão entre eles), bootstrap em blocos e erro-padrão por
-**cluster de sessão**.
+## 9. Resultados até agora
 
-### Poder estatístico
+**Exploratórios. Não confirmatórios. Amostra de uma sessão parcial.**
 
-Detectar acerto de 55% contra 50% (teste bicaudal, p<0,05, poder 80%) exige
-**~800 eventos independentes**.
-
-| horizonte | eventos por sessão de 9 h | sessões necessárias |
-|---|---:|---:|
-| 1 min | 540 | **~1,5** |
-| 3 min | 180 | **~4,5** |
-| 5 min | 108 | ~7,5 |
-
-`book_estrito.py` imprime esse número em toda execução para não deixar esquecer.
-
-## 6. Resultados até agora
-
-**Nada conclusivo. A amostra é de uma sessão parcial e está queimada.**
-
-### OBI nas observações independentes (80 min)
-
-`OBI_5 = (vol_BUY − vol_SELL)/(vol_BUY + vol_SELL)`, 5 níveis por lado.
+### OBI nas observações independentes (80 min, 13/11)
 
 | h | n indep | acerto | pts/op | p | veredito |
 |---|---:|---:|---:|---:|---|
@@ -171,172 +203,125 @@ Detectar acerto de 55% contra 50% (teste bicaudal, p<0,05, poder 80%) exige
 | 3 min | 26 | 50,0% | +0,6 | 0,98 | ruído |
 | 5 min | 16 | 62,5% | +50,6 | 0,14 | ruído |
 
-Com as observações sobrepostas o mesmo dado dava acerto 54,9% e t=4,01 — **artefato**.
+### Delta do book (números corrigidos)
 
-### Delta do book — números CORRIGIDOS (P0.1 e P0.2)
-
-A versão anterior deste README dizia "~97% churn" e "só 1% empurra o preço". **Ambos
-eram artefato de chavear o delta por nível em vez de por preço** — quando o melhor preço
-desliza 1 tick, os 5 níveis trocam de preço e o delta compara coisas diferentes.
-
-| métrica | antes (por nível) | **agora (por preço)** |
+| métrica | valor anterior | **valor correto** |
 |---|---|---|
 | churn | "~97%" | **25% da movimentação** |
-| disso, execução | não medido | **1,7%** |
-| disso, cancelamento | "~97%" | **98,3%** |
+| execução dentro do churn | não medido | **~1,7% (estimativa)** |
 | "só 1% empurra o preço" | publicado | **removido** — não sustentado |
 
-**O que os 25% significam:** os outros 75% da "movimentação" são preço entrando e saindo
-da janela de 5 níveis do MT5 — **não é ordem, é limitação de amostragem**.
+Os outros 75% da movimentação são `price_entered_window` / `price_left_window` —
+**limitação de amostragem do MT5**, não atividade de ordens.
 
-**Prova de que o delta está correto:** `scripts/testa_ida_volta.py` → **1248/1248**
-snapshots reconstruídos exatamente.
+**Prova do delta:** `scripts/testa_ida_volta.py` → **1248/1248** snapshots reconstruídos.
 
 ### Lado agressor — inferido, não observado
 
-`copy_ticks_from` retorna **0** em qualquer janela (1, 5, 15, 60 min), com
-`COPY_TICKS_ALL` e `COPY_TICKS_TRADE`. **Não há flags de agressor nesta conta.**
-O `lado_inferido` usa a regra do tick: 85.196 contratos de comprador agressor contra
-84.786 de vendedor, e **1,8% indefinidos** (negócio no meio do spread).
-
-### Limitações do MT5/BTG (medidas)
-
-| item | resultado |
-|---|---|
-| `ticks_bookdepth` do WIN | **5 níveis por lado** — teto do servidor |
-| ordem dos preços | vem com o **pior preço primeiro** (melhor bid = `max`, melhor ask = `min`) |
-| `market_book_get` após `market_book_add` | **0 entradas** por ~1 s |
-| tipos no book | só 1 (SELL) e 2 (BUY); 3 e 4 não aparecem |
-| **tick histórico** | **não existe** — `copy_ticks_*` = 0, `last_error = Success` |
-| `time` do MT5 | hora do **servidor** (BRT), não UTC |
-| latência da ponte | **6 ms** medidos no v5 (era 45 ms) |
-
-## 7. O que auditar
-
-Afirmações que um auditor independente deve verificar:
-
-1. **`copy_ticks_range` retorna 0 em todos os símbolos.** Isso significa que não há
-   histórico de tick na conta BTG. Se estiver errado, o projeto inteiro muda de escopo.
-   Teste: `mt5.copy_ticks_range("WINZ26", datetime.now()-timedelta(hours=2), datetime.now(), mt5.COPY_TICKS_ALL)`.
-
-2. **O book vem ordenado com o pior preço primeiro.** Se invertido, o spread calculado
-   sai 25 pts em vez de 5. Teste: imprimir `market_book_get` e comparar com `symbol_info_tick`.
-
-3. **8,8 mudanças/s é o teto real do book**, não uma limitação do meu polling.
-   Teste com polling de 20 ms e contar quantas vezes o snapshot muda.
-
-4. **A amostra de 80 min não permite conclusão.** Verificar se os números da seção 6
-   se reproduzem com `scripts/book_estrito.py`.
-
-5. **O delta está conceitualmente correto.** `vol_agora - vol_antes` por nível; `add` quando
-   positivo, `cancel` quando negativo, `novo`/`saiu` quando o nível aparece/some.
-
-6. **Newey-West não corrige sobreposição massiva.** Este é o ponto metodológico mais
-   importante. Ver a tabela da seção 5.
-
-## 8. Limitações conhecidas
-
-- **Amostra de 1 sessão.** Nenhum resultado deste repositório é conclusivo.
-- **5 níveis.** Não há book completo para o WIN na BTG retail. Para mais profundidade
-  seria preciso feed CAM/L2 da B3.
-- **Um ativo.** Só WIN, um contrato por vez. Sem cross-section, sem fator neutro.
-- **Sem fila (queue position).** O book diz o volume, não a posição na fila. Iceberg e
-  ordem escondida são invisíveis.
-- **Latência.** A ponte RPyC tem ~45 ms por chamada. Book "instantâneo" não existe aqui.
-- **Custo de 5 pts é uma premissa.** Se o slippage real for maior, todo P&L piora.
-- **Nenhum modelo foi treinado ainda.** A seção 6 é medição de sinal, não de estratégia.
-
-## 9. Como reproduzir
-
-### Pré-requisitos
-
-- MT5 da BTG rodando (via Lutris + Proton 10+ — **Wine 8 é rejeitado pelo build 6230**)
-- `~/Projetos/mt5-bridge/start_server.sh 18812` (ponte RPyC)
-- Docker com `timescale/timescaledb:latest-pg16`
-
-### Subir
-
-```bash
-# 1. banco
-docker run -d --name mercado-db \
-  -e POSTGRES_PASSWORD=SENHA -e POSTGRES_DB=mercado \
-  -p 127.0.0.1:5434:5432 \
-  -v /caminho/mercado-db:/var/lib/postgresql/data \
-  --shm-size=1g --restart unless-stopped \
-  timescale/timescaledb:latest-pg16
-
-# 2. schema (o CREATE EXTENSION é obrigatório — sem ele falha em silêncio)
-psql -h 127.0.0.1 -p 5434 -U postgres -d mercado -f sql/schema_v2.sql
-
-# 3. coleta
-python scripts/coleta_v4.py --simbolo WINZ26 --flush-seg 10
-
-# 4. análise
-python scripts/analisa_book_db.py
-python scripts/book_estrito.py     # a régua honesta
-```
-
-### Dependências
-
-```
-rpyc psycopg2-binary pandas numpy scipy
-```
+85.196 contratos de comprador agressor contra 84.786 de vendedor; **1,8% indefinidos**
+(negócio no meio do spread). Inferência por regra do tick, não flag do servidor.
 
 ## 10. Referências
 
-> **Status de verificação:** as referências marcadas **(não confirmado)** vieram de uma
-> coleta automatizada e **não foram validadas independentemente** por DOI/veículo/páginas.
-> Os números atribuídos a elas foram **removidos deste README** até verificação.
-> Auditar em `docs/REFERENCIAS_AUDITORIA.md`.
+Verificação completa em [`docs/REFERENCIAS_AUDITORIA.md`](docs/REFERENCIAS_AUDITORIA.md).
+**Números de fontes não confirmadas foram removidos.**
 
-**Confirmadas (DOI/veículo/páginas checados):**
+**Confirmadas:**
 
 - **López de Prado, M. (2018).** *Advances in Financial Machine Learning.* Wiley.
-  ISBN 9781119482086. Cap. 3 (triple-barrier), cap. 4 (sample weights / overlapping
-  outcomes), cap. 7 (purged K-fold com embargo), cap. 12 (CPCV).
-- **Sirignano, J. & Cont, R. (2019).** "Universal features of price formation in
-  financial markets." *Quantitative Finance* 19(9):1449–1459.
-  DOI [10.1080/14697688.2019.1571683](https://doi.org/10.1080/14697688.2019.1571683) · arXiv:1803.06917.
-  → features de **book** (profundidade, desequilíbrio) carregam informação sobre o
-  próximo movimento; o estudo usa book de ações (NASDAQ). **Não afirma** que features
-  de fita são mais fracas — essa extrapolação foi removida.
-- **Ait-Sahalia, Mykland & Zhang (2005).** "How Often to Sample a Continuous-Time Process
-  in the Presence of Market Microstructure Noise." *RFS* 18(2):351–416.
-  → a frequência ótima de amostragem para **estimar volatilidade** pode ser finita sob
-  ruído de microestrutura. **É sobre estimação de volatilidade, não sobre previsão
-  direcional** — a extensão "amostrar mais fino piora o SNR de previsão" é minha, não
-  deles, e foi removida do README.
+  ISBN 9781119482086. Cap. 3 (triple-barrier), 4 (sample weights), 7 (purged CV), 12 (CPCV).
 - **Cont, Kukanov & Stoikov (2014).** "The Price Impact of Order Book Events."
-  *Journal of Financial Econometrics* 12(1):47–88.
-  → define o **OFI** (order flow imbalance), a feature primária do protocolo.
+  *Journal of Financial Econometrics* 12(1):47–88. → define o **OFI**.
+- **Sirignano & Cont (2019).** "Universal features of price formation in financial
+  markets." *Quantitative Finance* 19(9):1449–1459. DOI 10.1080/14697688.2019.1571683.
+  → book de ações americanas; **não afirma** superioridade sobre features de fita.
+- **Ait-Sahalia, Mykland & Zhang (2005).** *RFS* 18(2):351–416.
+  → estimação de **volatilidade** sob ruído. **Não** trata de previsão direcional.
 
-**Não confirmadas — números removidos:**
+**NÃO VERIFICADAS** (números removidos): Baldo et al. (2026) · Grądzki et al. (2025) ·
+Kili et al. (2025) · Bhand & Joshi (2026, preprint, sem revisão por pares).
 
-- *Baldo, Morais & Silva (2026), ENEGEP/ABEPRO* — usada antes como "ROC 0,50–0,65 no WIN".
-  **Não confirmado.**
-- *Grądzki, Wójcik & Lessmann (2025), Financial Innovation* — **não confirmado.**
-- *Kili et al. (2025), Applied Sciences* — **não confirmado.**
-- *Bhand & Joshi (2026), Research Square* — **não confirmado**; se existir, é **preprint
-  sem revisão por pares**.
-- *Gu, Kelly & Xiu (2020), RFS* — referência real, mas o R²_oos de 0,34–0,40% é de
-  **retornos mensais em cross-section de ações**, **não** um "teto realista" para tick
-  intradiário de um futuro. **Removido como teto.**
+## 11. Meta-labeling — não implementado
 
-## 11. Estrutura do repositório
+**Correção de uma imprecisão anterior.** A arquitetura "modelo A decide se entra, modelo B
+decide a direção" foi descrita como *meta-labeling*. **Não é** — ou não é completo.
+
+Meta-labeling (López de Prado, cap. 3) exige:
+
+| componente | o que faz | existe aqui? |
+|---|---|---|
+| **modelo primário** | define o **lado** da operação | ❌ **não existe** |
+| **modelo secundário** | decide **se** aceitar o sinal do primário (size/filtro) | ❌ não existe |
+| **rótulo** | derivado do retorno do primário sobre triple-barrier | ❌ não definido |
+
+O que foi de fato testado foi **seleção por sinal de feature**: "entra na direção do OBI
+quando |OBI| ≥ limiar". Isso é **filtro de regime**, não meta-labeling.
+
+**Registrado como trabalho futuro.** Implementar meta-labeling corretamente exige:
+
+1. definir o modelo primário (uma regra explícita que dá o lado)
+2. rotular com triple-barrier **calibrado pela volatilidade realizada**
+3. treinar o secundário só nos casos em que o primário disparou
+4. purged K-fold com embargo ≥ horizonte, e sample weights por unicidade
+
+**Nada disso foi feito.** A seção anterior do README que usava o termo foi corrigida.
+
+## 12. Limitações
+
+Lista única e completa em [`docs/LIMITACOES.md`](docs/LIMITACOES.md). As cinco que mais
+mordem:
+
+1. **5 níveis** — profundidade limitada; book completo exigiria feed CAM/L2 da B3
+2. **Polling** — eventos entre leituras são perdidos
+3. **Sem identificação de cancelamento/execução** — só inferência
+4. **Timestamp do book é relógio local** — incerteza de alinhamento ~±3 ms
+5. **Sem reconstrução da fila** — posição na fila não é observável
+
+## 13. Como reproduzir
+
+```bash
+# 1. MT5 da BTG aberto (via Lutris + Proton 10+; Wine 8 é rejeitado pelo build 6230)
+# 2. ponte RPyC
+~/Projetos/mt5-bridge/start_server.sh 18812
+
+# 3. banco
+docker run -d --name mercado-db \
+  -e POSTGRES_PASSWORD=SUA_SENHA -e POSTGRES_DB=mercado \
+  -p 127.0.0.1:5434:5432 -v /caminho/mercado-db:/var/lib/postgresql/data \
+  --shm-size=1g --restart unless-stopped timescale/timescaledb:latest-pg16
+psql -h 127.0.0.1 -p 5434 -U postgres -d mercado -f sql/schema_v2.sql
+
+# 4. coleta
+cp .env.example .env   # ajuste a senha; nunca versione
+python scripts/coleta_v5.py --simbolo WINZ26 --flush-seg 10
+
+# 5. verificação e análise
+python scripts/verifica_integridade.py    # sai com código != 0 se falhar
+python scripts/book_estrito.py
+```
+
+Dependências fixas em [`requirements.txt`](requirements.txt).
+
+## 14. Estrutura
 
 ```
-├── README.md                  este arquivo
-├── sql/
-│   └── schema_v2.sql          hypertables tick, book, book_delta + compressão + retenção
+├── README.md                  este arquivo (porta de entrada)
+├── docs/
+│   ├── VERSOES.md             tabela de versões dos coletores
+│   ├── METODOLOGIA.md         régua estatística, Holm, poder, sessões
+│   ├── FEATURES.md            comparativo de features
+│   ├── EXECUCAO.md            modelo de execução e latência
+│   ├── LIMITACOES.md          lista única de limitações
+│   ├── PROTOCOLO.md           hipóteses pré-registradas
+│   ├── REFERENCIAS_AUDITORIA.md  afirmação → fonte → status
+│   ├── INFRAESTRUTURA.md      operação e armadilhas
+│   ├── MEDICOES.md            números brutos do dia
+│   ├── HISTORICO.md           resultados superados
+│   └── RELATORIO_AJUSTES.md   o que foi corrigido e por quê
 ├── scripts/
-│   ├── coleta_v4.py           coletor: 2 threads, 2 conexões RPyC, delta
-│   ├── analisa_book_db.py     correlação/acerto/P&L por horizonte
-│   ├── book_estrito.py        régua honesta: só obs independentes
-│   └── explica.py             didático: dado cru → cálculo → decisão → resultado
-└── docs/
-    └── INFRAESTRUTURA.md      detalhes de operação e armadilhas
+└── sql/schema_v2.sql
 ```
 
 ## Licença
 
-Uso pessoal. Sem garantia. Isto não é recomendação de investimento.
+Uso pessoal. Sem garantia. Não é recomendação de investimento.
