@@ -18,10 +18,15 @@
 
 Com ~8,5 snapshots/s, o intervalo entre leituras é **~118 ms**.
 
-| janela | observações na janela |
-|---|---:|
-| 250 ms | **~2** |
-| 1 s | **~8,5** |
+| janela | com 8,5 Hz (estimativa inicial) | **com 4,22 Hz (frequência real da janela)** |
+|---|---:|---:|
+| 250 ms | ~2 | **~1,05** |
+| 1 s | ~8,5 | **~4,2** |
+
+> **Correção de 13/11:** a estimativa inicial de 8,5 Hz era do coletor v5, que só entrou no
+> ar às 10:46. A janela analisada (09:20–10:40) foi coletada a **4,22 Hz**. Ver
+> `docs/NOTA_FREQUENCIA_E_INFERENCIA.md`. A conclusão não muda — com 250 ms há **1**
+> observação, não duas — mas a razão é mais forte do que o adendo dizia.
 
 Uma feature de fluxo precisa de resolução para detectar mudança de preço nível a nível.
 Com 2 pontos, o OFI clássico **perde a maior parte dos eventos**.
