@@ -91,6 +91,11 @@ o painel parecia travado mesmo com a UI atualizando a cada segundo. Agora grava 
 
 ## Dependencias
 
-Node >= 20 e Electron 33. `node_modules` fica fora do git (`app/.gitignore`).
+Node >= 20 e **Electron 45.3.2**. `node_modules` fica fora do git (`app/.gitignore`).
 Se o `postinstall` do Electron falhar em extrair o binario, `launch.sh` corrige
 extraindo o zip do `~/.cache/electron`.
+
+**Sobre `npm audit`:** o Electron 33 tinha 2 advisories altos (ASAR integrity bypass e
+injeção de AppleScript) e um no `extract-zip`, dependencia usada só na instalação.
+Subido para 45.3.2 — `npm audit` agora reporta **0**. O upgrade foi validado com a
+suíte CDP inteira (18 asserções na UI real), não por inspeção.
