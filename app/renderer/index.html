@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline';">
+<title>WIN Book Lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="dot-logo"></span>
+    <h1>WIN Book Lab</h1>
+    <span class="sub" id="repo-path"></span>
+  </div>
+  <div class="pills" id="pills">
+    <span class="pill" data-k="mt5"><i></i>MT5</span>
+    <span class="pill" data-k="bridge"><i></i>Ponte</span>
+    <span class="pill" data-k="docker"><i></i>Banco</span>
+    <span class="pill" data-k="collector"><i></i>Coletor</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- STATUS -->
+  <section class="cards">
+    <div class="card" id="c-mt5">
+      <div class="card-top"><span class="lbl">MT5</span><span class="st ok-off" id="s-mt5">—</span></div>
+      <div class="card-val" id="v-mt5">fechado</div>
+      <div class="card-hint">GUI via Lutris</div>
+    </div>
+    <div class="card" id="c-bridge">
+      <div class="card-top"><span class="lbl">Ponte RPyC</span><span class="st ok-off" id="s-bridge">—</span></div>
+      <div class="card-val" id="v-bridge">off</div>
+      <div class="card-hint">:18812</div>
+    </div>
+    <div class="card" id="c-docker">
+      <div class="card-top"><span class="lbl">Banco</span><span class="st ok-off" id="s-docker">—</span></div>
+      <div class="card-val" id="v-docker">off</div>
+      <div class="card-hint">TimescaleDB :5434</div>
+    </div>
+    <div class="card" id="c-collector">
+      <div class="card-top"><span class="lbl">Coletor</span><span class="st ok-off" id="s-collector">—</span></div>
+      <div class="card-val" id="v-collector">parado</div>
+      <div class="card-hint" id="h-collector">v5 · delta por preço</div>
+    </div>
+  </section>
+
+  <!-- CONTROLES -->
+  <section class="controls">
+    <button id="btn-start" class="btn primary">Ligar coleta</button>
+    <button id="btn-stop" class="btn danger">Parar</button>
+    <button id="btn-log" class="btn ghost">Abrir log</button>
+    <span class="msg" id="ctl-msg"></span>
+  </section>
+
+  <!-- METRICAS -->
+  <section class="metrics">
+    <div class="metric"><span class="m-lbl">snapshots hoje</span><span class="m-val" id="m-snap">—</span></div>
+    <div class="metric"><span class="m-lbl">linhas de book</span><span class="m-val" id="m-book">—</span></div>
+    <div class="metric"><span class="m-lbl">ticks hoje</span><span class="m-val" id="m-tick">—</span></div>
+    <div class="metric"><span class="m-lbl">deltas hoje</span><span class="m-val" id="m-delta">—</span></div>
+    <div class="metric"><span class="m-lbl">taxa (60 s)</span><span class="m-val" id="m-rate">—</span></div>
+    <div class="metric"><span class="m-lbl">ultima escrita</span><span class="m-val" id="m-last">—</span></div>
+  </section>
+
+  <section class="chart-wrap">
+    <div class="chart-head"><span>snapshots / s</span><span id="chart-now" class="chart-now">—</span></div>
+    <canvas id="chart" height="90"></canvas>
+  </section>
+
+  <div class="grid2">
+  <!-- ANALISE -->
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Analise</h2>
+      <span class="hint">metodo novo usa tempo real + max_atraso; antigo usa linhas (preservado)</span>
+    </div>
+    <div class="form">
+      <label>inicio<input id="f-ini" value="2026-11-13 09:20"></label>
+      <label>fim<input id="f-fim" value="2026-11-13 10:40"></label>
+      <label>custo<input id="f-custo" type="number" step="0.5" value="7.5"></label>
+      <label>fator<input id="f-fator" type="number" step="1" value="2"></label>
+      <label class="chk"><input id="f-csv" type="checkbox"> usar fixture (sem banco)</label>
+    </div>
+    <div class="controls">
+      <button id="btn-tempo" class="btn primary">Rodar metodo novo</button>
+      <button id="btn-linhas" class="btn ghost">Rodar metodo antigo</button>
+      <span class="msg" id="an-msg"></span>
+    </div>
+    <pre id="an-out" class="out"></pre>
+  </section>
+
+  <!-- LOG -->
+  <section class="panel">
+    <div class="panel-head"><h2>Log de coleta</h2><button id="btn-refresh-log" class="btn ghost sm">atualizar</button></div>
+    <pre id="log-out" class="out log"></pre>
+  </section>
+  </div>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

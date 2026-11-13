@@ -1,0 +1,16 @@
+{
+  "name": "win-book-lab",
+  "version": "1.0.0",
+  "description": "Painel de coleta e analise do book do WIN",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:wayland": "electron . --ozone-platform=wayland",
+    "test": "node test_lab.js"
+  },
+  "author": "ruiluucas",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}
