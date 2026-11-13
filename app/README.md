@@ -65,6 +65,30 @@ idempotencia do `start`.
   com array de argumentos, nao por shell
 - O app nunca envia ordem nem escreve no banco
 
+## Fidelidade ao MT5
+
+O gráfico usa **tick.last** (preço negociado), que é o que o MT5 desenha — não o mid.
+Verificado candle a candle contra `copy_rates_from_pos(WINZ26, TIMEFRAME_M1)`:
+fechamento idêntico no candle já fechado, diferença de 1–2 ticks no candle em formação.
+
+O eixo de tempo é deslocado para **BRT**. O banco guarda `timestamptz`; `extract(epoch)`
+devolve UTC, e o lightweight-charts exibe o que recebe — sem o deslocamento o eixo
+mostrava 17:25 quando eram 14:25.
+
+## Taxa de atualização
+
+Três coisas controlam o que você vê:
+
+| etapa | valor | onde |
+|---|---|---|
+| leitura do book | ~8,5 Hz | coletor (`time.sleep(0.001)`) |
+| **gravação no banco** | **a cada 2 s** | `FLUSH_SEG` em `coleta_auto.sh` |
+| leitura pelo painel | 1 s | `setInterval` em `renderer/app.js` |
+
+O gargalo era o **flush**: com `--flush-seg 15` o banco só recebia a cada 15 s, então
+o painel parecia travado mesmo com a UI atualizando a cada segundo. Agora grava a cada
+2 s (`FLUSH_SEG=2`, e o coletor usa `--flush-seg 2`). Para mudar, edite `FLUSH_SEG`.
+
 ## Dependencias
 
 Node >= 20 e Electron 33. `node_modules` fica fora do git (`app/.gitignore`).

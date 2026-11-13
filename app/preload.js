@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('lab', {
   status:    () => ipcRenderer.invoke('status'),
   dbstats:   () => ipcRenderer.invoke('dbstats'),
   book:      () => ipcRenderer.invoke('book'),
-  series:    (min) => ipcRenderer.invoke('series', min),
+  candles:   (min, bucket) => ipcRenderer.invoke('candles', min, bucket),
   start:     () => ipcRenderer.invoke('start'),
   stop:      () => ipcRenderer.invoke('stop'),
   analysis:  (method, opts) => ipcRenderer.invoke('analysis', method, opts),

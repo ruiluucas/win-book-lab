@@ -153,40 +153,46 @@ async function getBook() {
   };
 }
 
-// ---------- SERIE PARA O GRAFICO ----------
-function sqlSerie(min) {
+// ---------- CANDLES (fieis ao MT5) ----------
+// Usa o preco NEGOCIADO (tick.last), que e o que o MT5 mostra no grafico.
+// Nao usa mid: mid e construcao nossa e diverge do candle do MT5.
+function sqlCandles(min, bucket) {
   return `
-WITH b AS (
-  SELECT date_trunc('second', ts) t,
-    (max(CASE WHEN lado=2 THEN preco END) + min(CASE WHEN lado=1 THEN preco END)) / 2.0 AS mid
-  FROM book WHERE ts >= now() - interval '${min} minutes' GROUP BY 1
-),
-v AS (
-  SELECT date_trunc('second', ts) t, sum(volume) vol
-  FROM tick WHERE ts >= now() - interval '${min} minutes' GROUP BY 1
+WITH x AS (
+  SELECT to_timestamp(floor(extract(epoch FROM ts) / ${bucket}) * ${bucket}) AS b,
+         last, volume, ts AS tr
+  FROM tick
+  WHERE ts >= now() - interval '${min} minutes' AND last > 0
 )
-SELECT extract(epoch FROM b.t)::bigint AS ts, round(b.mid::numeric,1) AS mid, COALESCE(v.vol,0) AS vol
-FROM b LEFT JOIN v ON b.t = v.t ORDER BY b.t;
+SELECT extract(epoch FROM b)::bigint AS ts,
+       (array_agg(last ORDER BY tr))[1]      AS o,
+       max(last)                            AS h,
+       min(last)                            AS l,
+       (array_agg(last ORDER BY tr DESC))[1] AS c,
+       sum(volume)                          AS v
+FROM x GROUP BY b ORDER BY b;
 `;
 }
 
-async function getSeries(min = 10) {
-  const m = Math.max(1, Math.min(120, parseInt(min, 10) || 10));  // clamp, sem injecao
+async function getCandles(min = 30, bucket = 60) {
+  const m = Math.max(1, Math.min(180, parseInt(min, 10) || 30));
+  const b = Math.max(5, Math.min(300, parseInt(bucket, 10) || 60));
   const r = await run('docker', ['exec', 'mercado-db', 'psql', '-U', 'postgres',
-    '-d', 'mercado', '-t', '-A', '-F', '|', '-c', sqlSerie(m)]);
-  if (!r.ok) return { erro: r.err.split('\n')[0] || 'banco indisponivel', pontos: [] };
-  const pontos = [];
+    '-d', 'mercado', '-t', '-A', '-F', '|', '-c', sqlCandles(m, b)]);
+  if (!r.ok) return { erro: r.err.split('\n')[0] || 'banco indisponivel', candles: [] };
+  const candles = [];
   for (const ln of r.out.split('\n')) {
     if (!ln) continue;
-    const [ts, mid, vol] = ln.split('|');
-    if (!ts || !mid) continue;
-    pontos.push({ ts: +ts * 1000, mid: +mid, vol: +vol });
+    const [ts, o, h, l, c, v] = ln.split('|');
+    if (!ts) continue;
+    candles.push({ ts: +ts, o: +o, h: +h, l: +l, c: +c, v: +v });
   }
-  return { pontos, minutos: m };
+  return { candles, minutos: m, bucket: b };
 }
+
 
 module.exports = {
   REPO, VENV_PY, LOG_DIR, DSN, run,
   getStatus, dbStats, startCollection, stopCollection, runAnalysis, tailLog, listLogs,
-  getBook, getSeries,
+  getBook, getCandles,
 };

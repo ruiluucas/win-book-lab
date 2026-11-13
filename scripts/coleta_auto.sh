@@ -1,13 +1,48 @@
 #!/usr/bin/env bash
-# Coleta automatica diaria. Chamado pelo systemd timer as 09:00 (seg-sex).
-# Nao abre o MT5 (so GUI). Se o MT5 estiver fechado, registra e sai com 1.
+# Sobe tudo que a coleta precisa, na ordem certa, e checa cada passo.
+# Nao abre o MT5 — isso so pela GUI do Lutris (o CLI do Lutris esta quebrado).
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 LOG="$REPO/logs/coleta_auto.log"
 mkdir -p "$(dirname "$LOG")"
 
+PY="$HOME/Projetos/quant-lab/.venv/bin/python"
+FLUSH_SEG="${FLUSH_SEG:-2}"      # grava no banco a cada N segundos (era 15: o painel parecia travado)
+
+# O coletor le o DSN de MERCADO_DSN (o default dele nao serve). Pega do .env do
+# quant-lab se existir; senao usa o DSN local do container mercado-db.
+if [ -z "${MERCADO_DSN:-}" ] && [ -f "$HOME/Projetos/quant-lab/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$HOME/Projetos/quant-lab/.env" 2>/dev/null || true
+  set +a
+fi
+export MERCADO_DSN="${MERCADO_DSN:-host=127.0.0.1 port=5434 dbname=mercado user=postgres password=mercado_local}"
+
 log(){ printf '%s  %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$LOG"; echo "$*"; }
+
+# checa um processo python pelo nome do script, sem pgrep casar com o proprio shell
+# (o helper abaixo roda como `python3 - coleta_v5.py`, entao precisa se excluir)
+rodando(){
+  python3 - "$1" <<'EOF'
+import sys, os, glob
+alvo = sys.argv[1]
+eu = os.getpid()
+for d in glob.glob("/proc/[0-9]*"):
+    pid = d.split("/")[-1]
+    if int(pid) == eu:
+        continue
+    try:
+        if "python" not in os.readlink(d + "/exe"):
+            continue
+        cmd = open(d + "/cmdline", "rb").read().replace(b"\0", b" ").decode(errors="ignore")
+        if ("scripts/" + alvo) in cmd:
+            print(pid); break
+    except Exception:
+        pass
+EOF
+}
 
 log "=== inicio automatico ==="
 
@@ -42,45 +77,30 @@ fi
 ss -tln 2>/dev/null | grep -q ":18812 " || { log "[ERRO] ponte nao subiu"; exit 1; }
 
 # 4. ja tem coletor rodando? nao duplica
-if pgrep -f "coleta_v5.py" >/dev/null 2>&1; then
-  log "[ok] coletor ja rodando (pid $(pgrep -f coleta_v5.py | head -1))"
+PID_COL="$(rodando coleta_v5.py)"
+if [ -n "$PID_COL" ]; then
+  log "[ok] coletor ja rodando (pid $PID_COL)"
   exit 0
 fi
 
-# 5. descobre o contrato WIN vigente (nao fixar WINZ26 — vence em dez)
-SIMBOLO=$($HOME/Projetos/quant-lab/.venv/bin/python - <<'PY' 2>/dev/null
-import rpyc, re, datetime
-try:
-    c = rpyc.classic.connect("127.0.0.1", 18812)
-    c._config["sync_request_timeout"] = 60
-    mt5 = c.modules["MetaTrader5"]
-    mt5.initialize()
-    ativos = [s.name for s in mt5.symbols_get() if s.name.upper().startswith("WIN")]
-    # WIN + letra do mes (F,G,H,J,K,M,N,Q,U,V,X,Z) + 2 digitos de ano
-    hoje = datetime.date.today()
-    melhores = []
-    for s in ativos:
-        m = re.match(r"^WIN([FGHJKMNQUVXZ])(\d{2})$", s.upper())
-        if not m: continue
-        letra, aa = m.group(1), int(m.group(2))
-        venc = datetime.date(2000+aa, "FGHJKMNQUVXZ".index(letra)+1, 15)
-        if venc >= hoje:                      # so contratos nao vencidos
-            melhores.append((venc, s))
-    print(min(melhores)[1] if melhores else "")
-except Exception:
-    print("")
-PY
-)
-[ -z "$SIMBOLO" ] && { log "[ERRO] nao consegui detectar o contrato WIN vigente"; exit 1; }
+# 5. contrato WIN vigente — script proprio, symbol_info em 24 candidatos (0,45 s),
+#    porque symbols_get() devolve 52.506 simbolos e leva 39 s.
+SIMBOLO="$("$PY" scripts/detecta_contrato.py)"
+if [ -z "$SIMBOLO" ]; then
+  log "[ERRO] nao consegui detectar o contrato WIN vigente"
+  exit 1
+fi
 log "[ok] contrato vigente: $SIMBOLO"
 
-# 6. coletor em background, sobrevive ao timer
-log "iniciando coleta_v5 em $SIMBOLO"
-setsid nohup $HOME/Projetos/quant-lab/.venv/bin/python scripts/coleta_v5.py --simbolo "$SIMBOLO" --flush-seg 10 \
+# 6. coletor em background, desacoplado do shell
+log "iniciando coleta_v5 em $SIMBOLO (flush ${FLUSH_SEG}s)"
+setsid nohup "$PY" scripts/coleta_v5.py --simbolo "$SIMBOLO" --flush-seg "$FLUSH_SEG" \
   >>"$REPO/logs/coletor_$SIMBOLO.log" 2>&1 &
-sleep 5
-if pgrep -f "coleta_v5.py" >/dev/null 2>&1; then
-  log "[ok] coletor rodando (pid $(pgrep -f coleta_v5.py | head -1))"
+sleep 6
+
+PID_COL="$(rodando coleta_v5.py)"
+if [ -n "$PID_COL" ]; then
+  log "[ok] coletor rodando (pid $PID_COL)"
 else
   log "[ERRO] coletor morreu na largada — ver logs/coletor_$SIMBOLO.log"
   exit 1

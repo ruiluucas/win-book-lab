@@ -31,7 +31,7 @@ function createWindow() {
 ipcMain.handle('status',   () => lab.getStatus());
 ipcMain.handle('dbstats',  () => lab.dbStats());
 ipcMain.handle('book',     () => lab.getBook());
-ipcMain.handle('series',   (_e, min) => lab.getSeries(min));
+ipcMain.handle('candles',  (_e, min, bucket) => lab.getCandles(min, bucket));
 ipcMain.handle('start',    () => lab.startCollection());
 ipcMain.handle('stop',     () => lab.stopCollection());
 ipcMain.handle('analysis', (_e, m, o) => lab.runAnalysis(m, o));

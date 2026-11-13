@@ -2,8 +2,11 @@
 let chartApi = null;          // lightweight-charts
 let candleSeries = null;
 let volSeries = null;
-let minutos = 5;              // janela do grafico
+let minutos = 30;             // janela do grafico (min)
+let bucket = 60;              // segundos por candle
 let busySeries = false;
+let ultimoSetData = 0;
+const TZ_OFFSET = 3 * 3600;   // MT5/banco guarda em UTC+0; exibimos BRT (UTC-3)
 
 const $ = id => document.getElementById(id);
 const fmt = n => (n === undefined || n === null || isNaN(n)) ? '—' : n.toLocaleString('pt-BR');
@@ -156,38 +159,40 @@ function initChart() {
   setTimeout(resize, 60);
 }
 
-// agrega pontos (1/s) em candles de `bucket` segundos + volume
-function toCandles(pontos, bucket = 5) {
-  const map = new Map();
-  for (const p of pontos) {
-    const b = Math.floor(p.ts / 1000 / bucket) * bucket;
-    if (!map.has(b)) map.set(b, { o: p.mid, h: p.mid, l: p.mid, c: p.mid, v: 0 });
-    const c = map.get(b);
-    c.h = Math.max(c.h, p.mid);
-    c.l = Math.min(c.l, p.mid);
-    c.c = p.mid;
-    c.v += p.vol;
-  }
-  const candles = [], volumes = [];
-  for (const [t, c] of [...map.entries()].sort((a, b) => a[0] - b[0])) {
+// Converte candles do banco para o formato do lightweight-charts.
+// O banco entrega epoch em UTC; o chart exibe o que recebe, entao deslocamos
+// para BRT — senao o eixo mostra 17:25 quando sao 14:25.
+function paraChart(cs) {
+  const candles = [], vols = [];
+  for (const c of cs) {
+    const t = c.ts - TZ_OFFSET;
     candles.push({ time: t, open: c.o, high: c.h, low: c.l, close: c.c });
-    volumes.push({
+    vols.push({
       time: t, value: c.v,
-      color: c.c >= c.o ? 'rgba(47,191,113,.42)' : 'rgba(229,72,77,.42)',
+      color: c.c >= c.o ? 'rgba(47,191,113,.45)' : 'rgba(229,72,77,.45)',
     });
   }
-  return { candles, volumes };
+  return { candles, vols };
 }
 
-async function carregaGrafico() {
+async function carregaGrafico(completo = false) {
   if (busySeries || !candleSeries) return;
   busySeries = true;
   try {
-    const r = await window.lab.series(minutos);
-    if (r.erro || !r.pontos || !r.pontos.length) return;
-    const { candles, volumes } = toCandles(r.pontos, 5);
-    candleSeries.setData(candles);
-    volSeries.setData(volumes);
+    const r = await window.lab.candles(minutos, bucket);
+    if (r.erro || !r.candles || !r.candles.length) return;
+    const { candles, vols } = paraChart(r.candles);
+
+    // setData completo a cada 30 s (backfill); entre isso, so o ultimo candle
+    const agora = Date.now();
+    if (completo || candles.length < 2 || agora - ultimoSetData > 30000) {
+      candleSeries.setData(candles);
+      volSeries.setData(vols);
+      ultimoSetData = agora;
+    } else {
+      candleSeries.update(candles[candles.length - 1]);
+      volSeries.update(vols[vols.length - 1]);
+    }
   } catch (e) {
     console.error('grafico:', e);
   } finally {
@@ -202,7 +207,9 @@ $('tf').addEventListener('click', e => {
   [...$('tf').children].forEach(x => x.classList.remove('on'));
   b.classList.add('on');
   minutos = parseInt(b.dataset.min, 10);
-  carregaGrafico();
+  bucket = parseInt(b.dataset.bucket, 10);
+  ultimoSetData = 0;             // forca setData completo ao trocar de janela
+  carregaGrafico(true);
 });
 
 // ==================== loop ====================
@@ -281,7 +288,7 @@ window.addEventListener('unhandledrejection', e => {
     $('repo-path').textContent = await window.lab.repo();
     $('log-out').textContent = await window.lab.logtail();
     await tick();
-    await carregaGrafico();
+    await carregaGrafico(true);
   } catch (err) {
     window.__erros.push('boot: ' + err.message);
     $('log-out').textContent = 'FALHA NO BOOT: ' + err.message + '\n' + err.stack;
@@ -289,7 +296,7 @@ window.addEventListener('unhandledrejection', e => {
     return;
   }
 
-  setInterval(tick, 2000);            // status, metricas, book
-  setInterval(carregaGrafico, 5000);  // grafico
+  setInterval(tick, 1500);                    // status, metricas, book
+  setInterval(() => carregaGrafico(false), 1000);  // grafico a 1 s, incremental
   window.__ready = true;              // sinaliza boot completo (usado nos testes)
 })();

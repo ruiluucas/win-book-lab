@@ -108,12 +108,12 @@
     <div class="panel chart-panel">
       <div class="panel-head">
         <h2>Preço
-          <span class="info" data-tip="Mid = (melhor bid + melhor ask) / 2, agregado por segundo. Candles de 5 s montados no cliente. Barras embaixo = volume negociado por segundo.">i</span>
+          <span class="info" data-tip="Candles do preço NEGOCIADO (tick.last), igual ao gráfico do MT5 — não é mid. Fuso em BRT. Barras embaixo = volume negociado no candle. Atualiza a cada segundo.">i</span>
         </h2>
         <div class="seg" id="tf">
-          <button data-min="5" class="on">5 min</button>
-          <button data-min="10">10 min</button>
-          <button data-min="30">30 min</button>
+          <button data-min="10" data-bucket="15">15s</button>
+          <button data-min="30" data-bucket="60" class="on">1 min</button>
+          <button data-min="120" data-bucket="300">5 min</button>
         </div>
       </div>
       <div id="chart" class="chart"></div>
