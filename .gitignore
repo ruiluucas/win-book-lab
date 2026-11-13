@@ -3,6 +3,11 @@ __pycache__/
 .venv/
 .env
 *.parquet
-*.csv
-dados/
 *.log
+dados/
+
+# dados brutos NAO versionados
+*.csv
+
+# EXCECAO: fixtures de teste (pequenas, sem dado sensivel, necessarias ao pytest)
+!tests/fixtures/*.csv
