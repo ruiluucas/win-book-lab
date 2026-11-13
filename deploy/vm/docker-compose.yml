@@ -1,0 +1,63 @@
+# Stack de coleta do WIN na VM.
+#   db      -> TimescaleDB com nosso schema (tick, book, book_delta_v2)
+#   coletor -> le o book a ~9 Hz e grava snapshot + delta por preco
+#
+# O MT5 e a ponte RPyC NAO entram aqui: precisam de Wine + sessao grafica e
+# rodam como systemd no host (mt5-vm.service, mt5-bridge.service).
+name: winbook
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: winbook-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: winbook
+      POSTGRES_PASSWORD: ${PG_SENHA:?defina PG_SENHA no .env}
+      POSTGRES_DB: mercado
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - work_mem=32MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - wal_compression=on
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - timescaledb.telemetry_level=off
+    ports:
+      - "127.0.0.1:5432:5432"      # so local; o app acessa por tunel SSH
+    volumes:
+      - winbook_dados:/var/lib/postgresql/data
+      - ./sql/schema_v2.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U winbook -d mercado"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    shm_size: 512mb
+
+  coletor:
+    build: .
+    container_name: winbook-coletor
+    restart: unless-stopped
+    network_mode: host             # alcanca a ponte em 127.0.0.1:18812
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MERCADO_DSN: "host=127.0.0.1 port=5432 dbname=mercado user=winbook password=${PG_SENHA}"
+    command: ["--simbolo", "auto", "--flush-seg", "0.1"]
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "3" }
+
+volumes:
+  winbook_dados:

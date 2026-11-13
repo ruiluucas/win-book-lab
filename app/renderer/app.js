@@ -88,6 +88,22 @@ function paintStatus(s) {
     if (el) el.lastChild.textContent = 'Coletor';
   }
 
+  const fEl = document.querySelector('.pill[data-k="fonte"]');
+  if (fEl) {
+    const ehVM = (s.fonte || 'local') === 'vm';
+    fEl.lastChild.textContent = ehVM ? ' VM' : ' Local';
+    fEl.classList.toggle('on', !s.offline);
+    fEl.classList.toggle('vm', ehVM);
+    fEl.setAttribute('data-tip', [
+      `Fonte — ${ehVM ? 'VM Inovatech' : 'esta máquina'}`,
+      ehVM ? 'túnel SSH · 127.0.0.1:5433' : '127.0.0.1:5434',
+      ehVM ? 'O MT5 e o banco rodam na VM. Aqui só se visualiza.'
+           : 'MT5, ponte, banco e coletor rodam aqui.',
+      s.offline ? 'VM fora do ar — o painel mostra o último dado conhecido.'
+                : 'Mude em Configurações → Fonte dos dados.',
+    ].join('\n'));
+  }
+
   $('btn-start').disabled = !!c || !s.mt5;
   $('btn-stop').disabled = !c;
 }
@@ -448,7 +464,15 @@ function aplicaTimeframe(valor) {
   carregaGrafico(true);
 }
 
-function abreConfig() {
+async function abreConfig() {
+  try {
+    const c = await window.lab.config();
+    $('cfg-fonte').value = c.fonte;
+    $('cfg-vm-host').value = c.vm.host;
+    $('cfg-vm-user').value = c.vm.usuario;
+    $('cfg-vm-porta').value = String(c.vm.portaLocal);
+  } catch {}
+  atualizaEstadoFonte(false);
   $('cfg-grafico').value = String(cfg.grafico);
   $('cfg-book').value = String(cfg.book);
   $('cfg-metricas').value = String(cfg.metricas);
@@ -462,6 +486,43 @@ function fechaConfig() {
   $('modal-config').classList.remove('aberto');
 }
 
+// Grava a escolha no processo principal (nao no localStorage: muda DSN e tunel).
+async function salvaFonte() {
+  return window.lab.configSet({
+    fonte: $('cfg-fonte').value,
+    vm: {
+      host: $('cfg-vm-host').value.trim() || '192.168.201.50',
+      usuario: $('cfg-vm-user').value.trim() || 'root',
+      portaLocal: parseInt($('cfg-vm-porta').value, 10) || 5433,
+    },
+  });
+}
+
+// Mostra o estado REAL da ligacao, nao a intencao: a escolha pode ser 'vm' e o
+// tunel estar caido. `testar` abre o tunel e consulta o banco.
+async function atualizaEstadoFonte(testar = true) {
+  const el = $('cfg-vm-estado');
+  const escolha = $('cfg-fonte').value;
+  $('cfg-vm').classList.toggle('on', escolha === 'vm');
+  if (escolha !== 'vm') { el.textContent = '\u2014'; el.className = 'cfg-estado'; return; }
+  if (!testar) { el.textContent = 't\u00fanel n\u00e3o verificado'; el.className = 'cfg-estado'; return; }
+  el.textContent = 'conectando\u2026'; el.className = 'cfg-estado';
+  try {
+    const f = await window.lab.fonte();
+    if (f.preparo && f.preparo.ok && f.dsnOk) {
+      el.textContent = `t\u00fanel ativo${f.preparo.pid ? ' (pid ' + f.preparo.pid + ')' : ''}`
+                     + `\nbanco da VM acess\u00edvel`;
+      el.className = 'cfg-estado ok';
+    } else {
+      el.textContent = 'sem conex\u00e3o: ' + (f.motivo || 'motivo desconhecido');
+      el.className = 'cfg-estado err';
+    }
+  } catch (e) {
+    el.textContent = 'erro: ' + e.message;
+    el.className = 'cfg-estado err';
+  }
+}
+
 function aplicarConfigDaTela() {
   cfg.grafico = parseInt($('cfg-grafico').value, 10);
   cfg.book = parseInt($('cfg-book').value, 10);
@@ -471,6 +532,7 @@ function aplicarConfigDaTela() {
   cfg.fator = parseFloat($('cfg-fator').value);
 
   salvaConfig();
+  salvaFonte().catch(() => {});
   aplicaTimers();
   aplicaTimeframe(cfg.tf);
   $('f-custo').value = cfg.custo;
@@ -479,7 +541,11 @@ function aplicarConfigDaTela() {
 }
 
 $('btn-config').onclick = abreConfig;
-$('cfg-fechar').onclick = fechaConfig;
+$('cfg-fonte').onchange = async () => { await salvaFonte(); atualizaEstadoFonte(true); };
+  for (const id of ['cfg-vm-host', 'cfg-vm-user', 'cfg-vm-porta']) {
+    $(id).onchange = () => { salvaFonte().then(() => atualizaEstadoFonte(true)); };
+  }
+  $('cfg-fechar').onclick = fechaConfig;
 $('cfg-cancelar').onclick = fechaConfig;
 $('cfg-salvar').onclick = aplicarConfigDaTela;
 $('modal-config').addEventListener('click', e => {

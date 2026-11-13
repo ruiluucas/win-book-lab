@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('lab', {
   logtail:   () => ipcRenderer.invoke('logtail'),
   listlogs:  () => ipcRenderer.invoke('listlogs'),
   openlog:   () => ipcRenderer.invoke('openlog'),
+  config:  () => ipcRenderer.invoke('config'),
+  configSet: (c) => ipcRenderer.invoke('config-set', c),
+  fonte:   () => ipcRenderer.invoke('fonte'),
   repo:      () => ipcRenderer.invoke('repo'),
 });
 

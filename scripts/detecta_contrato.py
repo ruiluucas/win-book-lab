@@ -22,16 +22,26 @@ LETRAS = "FGHJKMNQUVXZ"
 
 
 def candidatos(mt5, hoje):
-    """Contratos WIN existentes e nao vencidos, ordenados por vencimento."""
+    """Contratos WIN existentes e nao vencidos, do mais proximo ao mais distante.
+
+    ATENCAO: vencimento mais proximo NAO e o criterio de contrato da frente — o
+    da frente e o mais LIQUIDO. Aqui so listamos; quem decide e `detecta()`.
+    """
     out = []
     for ano in (hoje.year, hoje.year + 1):
         for i, letra in enumerate(LETRAS):
             nome = f"WIN{letra}{ano % 100:02d}"
-            if mt5.symbol_info(nome) is None:
+            info = mt5.symbol_info(nome)
+            if info is None:
                 continue
             venc = datetime.date(ano, i + 1, 15)   # vencimento ~dia 15
             if venc >= hoje:
-                out.append((venc, nome))
+                # session_deals e o contador de negocios da sessao e o sinal de
+                # liquidez mais confiavel. volume_real vem 0 ou 1 em alguns
+                # terminais (medido no local: WINZ26 real=1, session_deals=4.6M).
+                deals = float(getattr(info, "session_deals", 0) or 0)
+                vol = float(getattr(info, "session_volume", 0) or 0)
+                out.append((venc, nome, deals, vol))
     out.sort()
     return out
 
@@ -52,9 +62,17 @@ def detecta(verbose=False):
             return ""
         cand = candidatos(mt5, datetime.date.today())
         if verbose:
-            for v, n in cand:
-                print(f"  {n}  vence {v}", file=sys.stderr)
-        return cand[0][1] if cand else ""
+            for v, n, deals, vol in cand:
+                print(f"  {n}  vence {v}  negocios {deals:>12.0f}", file=sys.stderr)
+        if not cand:
+            return ""
+        # O da frente e o MAIS LIQUIDO, nao o de vencimento mais proximo.
+        # Se todos estiverem sem volume (fora do pregao), cai para o mais proximo.
+        com_volume = [c for c in cand if c[2] > 0 or c[3] > 0]
+        if com_volume:
+            # liquidez: primeiro numero de negocios, depois volume financeiro
+            return max(com_volume, key=lambda c: (c[2], c[3]))[1]
+        return cand[0][1]
     except Exception as e:
         print(f"erro na ponte: {e}", file=sys.stderr)
         return ""

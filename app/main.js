@@ -39,6 +39,18 @@ ipcMain.handle('logtail',  () => lab.tailLog());
 ipcMain.handle('listlogs', () => lab.listLogs());
 ipcMain.handle('openlog',  () => shell.showItemInFolder(path.join(lab.LOG_DIR, 'coleta_auto.log')));
 ipcMain.handle('repo',     () => lab.REPO);
+  // fonte do dado: local ou VM. Trocar aqui muda DSN, tunel e status.
+  ipcMain.handle('config',      () => lab.config.carrega());
+  ipcMain.handle('config-set',  (_e, c) => {
+    const antes = lab.config.carrega().fonte;
+    const novo = lab.config.salva(c);
+    if (antes !== novo.fonte) lab.tunel.derruba();   // troca limpa
+    return novo;
+  });
+  ipcMain.handle('fonte',       async () => {
+    const f = await lab.fonteAtual();
+    return { fonte: f.fonte, dsnOk: !!f.dsn, preparo: f.preparo, motivo: f.motivo || null };
+  });
 
 // controles da janela
 ipcMain.on('win-min',   () => win && win.minimize());

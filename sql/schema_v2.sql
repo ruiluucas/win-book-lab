@@ -110,6 +110,6 @@ SELECT add_compression_policy('book_delta_v2', INTERVAL '2 days', if_not_exists 
 SELECT add_retention_policy('book_delta_v2', INTERVAL '2 years', if_not_exists => TRUE);
 
 -- P0.3: sem flags do servidor (copy_ticks_* = 0). Agressor e INFERIDO.
--- ALTER TABLE tick ADD COLUMN IF NOT EXISTS lado_inferido smallint;
+ALTER TABLE tick ADD COLUMN IF NOT EXISTS lado_inferido smallint;
 --   1 = comprador agressor (last>=ask) | -1 = vendedor (last<=bid) | 0 = indefinido
--- P0.4: ALTER TABLE tick ADD COLUMN IF NOT EXISTS t_recv_ns bigint;
+ALTER TABLE tick ADD COLUMN IF NOT EXISTS t_recv_ns bigint;   -- P0.4: latencia de recepcao

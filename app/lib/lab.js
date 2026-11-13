@@ -7,7 +7,28 @@ const fs = require('fs');
 const REPO = path.resolve(__dirname, '..', '..');
 const VENV_PY = process.env.LAB_PY || '/home/rui/Projetos/quant-lab/.venv/bin/python';
 const LOG_DIR = path.join(REPO, 'logs');
-const DSN = 'host=127.0.0.1 port=5434 dbname=mercado user=postgres password=mercado_local';
+const DSN_LOCAL = 'host=127.0.0.1 port=5434 dbname=mercado user=postgres password=mercado_local';
+
+const config = require('./config');
+const tunel  = require('./tunel');
+
+// ---------- de onde vem o dado ----------
+// local -> Postgres desta maquina (5434)
+// vm    -> Postgres da VM Inovatech, via tunel SSH em 127.0.0.1:5433
+// Toda consulta passa por aqui: trocar a fonte no app muda o DSN em um lugar so.
+async function fonteAtual() {
+  const cfg = config.carrega();
+  if (cfg.fonte !== 'vm') {
+    return { cfg, fonte: 'local', dsn: DSN_LOCAL, preparo: { ok: true } };
+  }
+  const preparo = await tunel.garante(cfg);
+  const dsn = preparo.ok ? config.dsnVM() : null;
+  return {
+    cfg, fonte: 'vm', dsn: dsn || DSN_LOCAL, preparo,
+    motivo: !preparo.ok ? preparo.motivo
+          : (!dsn ? 'senha da VM ausente em ~/.config/winbook-lab/vm.env' : null),
+  };
+}
 
 function run(cmd, args, opts = {}) {
   return new Promise((resolve) => {
@@ -22,7 +43,61 @@ function run(cmd, args, opts = {}) {
   });
 }
 
+function sshVm(cfg, cmd, timeout = 30000) {
+  const v = cfg.vm;
+  return run('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=6',
+    '-o', 'StrictHostKeyChecking=accept-new', `${v.usuario}@${v.host}`, cmd],
+    { timeout });
+}
+
+let cacheStatusRemoto = null;
+
+// Estado dos servicos NA VM. Uma ida ao SSH a cada 10 s: as pilulas nao
+// precisam de mais, e SSH a 2,5/s custaria mais que o banco inteiro.
+async function statusRemoto(cfg) {
+  const agora = Date.now();
+  if (cacheStatusRemoto && agora - cacheStatusRemoto.ts < 10000) return cacheStatusRemoto.v;
+
+  const cmd = [
+    'echo "mt5=$(pgrep -x main >/dev/null && echo sim || echo nao)"',
+    'echo "ponte=$(ss -tln 2>/dev/null | grep -q \':18812 \' && echo sim || echo nao)"',
+    'echo "db=$(docker ps --filter name=winbook-db --format \'{{.Status}}\')"',
+    'echo "col=$(docker ps --filter name=winbook-coletor --format \'{{.Status}}\')"',
+    'echo "sym=$(docker logs --tail 200 winbook-coletor 2>&1 | grep -o \'contrato: WIN[A-Z0-9]*\' | tail -1 | cut -d\' \' -f2)"',
+  ].join('; ');
+
+  const v = cfg.vm;
+  const r = await run('ssh', [
+    '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=6',
+    '-o', 'StrictHostKeyChecking=accept-new',
+    `${v.usuario}@${v.host}`, cmd,
+  ], { timeout: 12000 });
+
+  if (!r.ok) {
+    const falha = { mt5: false, bridge: false, docker: null, collector: null,
+                    fonte: 'vm', offline: true,
+                    erro: (r.err || 'VM inacessivel').split('\n')[0].slice(0, 120),
+                    ts: Date.now() };
+    cacheStatusRemoto = { ts: agora, v: falha };
+    return falha;
+  }
+  const g = (k) => (r.out.match(new RegExp('^' + k + '=(.*)$', 'm')) || [])[1] || '';
+  const col = g('col');
+  const ok = {
+    mt5: g('mt5') === 'sim',
+    bridge: g('ponte') === 'sim',
+    docker: g('db') || null,
+    collector: col ? { pid: 'remoto', symbol: g('sym') || '?' } : null,
+    fonte: 'vm', offline: false, erro: null, ts: Date.now(),
+  };
+  cacheStatusRemoto = { ts: agora, v: ok };
+  return ok;
+}
+
 async function getStatus() {
+  const { cfg, fonte } = await fonteAtual();
+  if (fonte === 'vm') return statusRemoto(cfg);
+
   const [mt5, bridge, docker, coll] = await Promise.all([
     run('bash', ['-c', 'ps -eo comm 2>/dev/null | grep -qx main && echo sim || echo nao']),
     run('bash', ['-c', 'ss -tln 2>/dev/null | grep -q ":18812 " && echo sim || echo nao']),
@@ -37,6 +112,7 @@ async function getStatus() {
     bridge: bridge.out === 'sim',
     docker: (docker.ok && docker.out) ? docker.out : null,
     collector: line ? { pid: pid ? pid[1] : '?', symbol: sym ? sym[1] : '?' } : null,
+    fonte: 'local', offline: false, erro: null,
     ts: Date.now(),
   };
 }
@@ -63,6 +139,20 @@ async function dbStats() {
 }
 
 async function startCollection() {
+  const { cfg, fonte } = await fonteAtual();
+  if (fonte === 'vm') {
+    const st = await statusRemoto(cfg);
+    if (st.offline) return { ok: false, msg: 'VM inacessivel: ' + st.erro };
+    if (!st.mt5) return { ok: false, msg: 'MT5 fechado na VM.' };
+    if (st.collector) return { ok: true, msg: `Ja coletando na VM (${st.collector.symbol})` };
+    const r = await sshVm(cfg, 'cd /opt/winbook && docker compose up -d coletor 2>&1 | tail -3', 90000);
+    cacheStatusRemoto = null;
+    await new Promise(r2 => setTimeout(r2, 4000));
+    const a = await statusRemoto(cfg);
+    return a.collector
+      ? { ok: true, msg: `Coleta iniciada na VM (${a.collector.symbol})` }
+      : { ok: false, msg: 'Coletor nao subiu na VM: ' + (r.out || r.err).slice(0, 120) };
+  }
   const st = await getStatus();
   if (!st.mt5) return { ok: false, msg: 'MT5 fechado. Abra pelo Lutris primeiro.' };
   if (st.collector) return { ok: true, msg: `Ja coletando (pid ${st.collector.pid}, ${st.collector.symbol})` };
@@ -77,6 +167,16 @@ async function startCollection() {
 }
 
 async function stopCollection() {
+  const { cfg, fonte } = await fonteAtual();
+  if (fonte === 'vm') {
+    const r = await sshVm(cfg, 'cd /opt/winbook && docker compose stop coletor 2>&1 | tail -2', 60000);
+    cacheStatusRemoto = null;
+    await new Promise(r2 => setTimeout(r2, 2000));
+    const a = await statusRemoto(cfg);
+    return a.collector
+      ? { ok: false, msg: 'Coletor da VM ainda vivo: ' + (r.out || r.err).slice(0, 100) }
+      : { ok: true, msg: 'Coleta da VM parada' };
+  }
   const st = await getStatus();
   if (!st.collector) return { ok: true, msg: 'Nao havia coletor rodando' };
   await run('bash', ['-c', `kill ${st.collector.pid} 2>/dev/null || true`]);
@@ -98,12 +198,17 @@ async function runAnalysis(method, opts = {}) {
   const r = await run(VENV_PY, args, {
     timeout: 240000,
     cwd: REPO,
-    env: { ...process.env, MERCADO_DSN: DSN },
+    env: { ...process.env, MERCADO_DSN: (await fonteAtual()).dsn },
   });
   return { ok: r.ok, out: (r.out + '\n' + r.err).trim() };
 }
 
 async function tailLog(n = 40) {
+  const { cfg, fonte } = await fonteAtual();
+  if (fonte === 'vm') {
+    const r = await sshVm(cfg, `docker logs --tail ${n} winbook-coletor 2>&1`, 15000);
+    return r.ok ? r.out : '(VM inacessivel: ' + (r.err || '').slice(0, 100) + ')';
+  }
   const f = path.join(LOG_DIR, 'coleta_auto.log');
   if (!fs.existsSync(f)) return '(sem log ainda)';
   const r = await run('bash', ['-c', `tail -${n} ${JSON.stringify(f)}`]);
@@ -141,11 +246,16 @@ function dsnParaObjeto(dsn) {
   return o;
 }
 
-function getPool() {
+let poolDsn = null;
+
+function getPool(dsn) {
+  // trocar de fonte (local <-> VM) exige pool novo: sao servidores diferentes
+  if (pool && poolDsn !== dsn) { try { pool.end(); } catch {} pool = null; poolFalhou = false; }
   if (pool || poolFalhou) return pool;
+  poolDsn = dsn;
   try {
     const { Pool } = require('pg');
-    pool = new Pool({ ...dsnParaObjeto(DSN), max: 4, idleTimeoutMillis: 30000,
+    pool = new Pool({ ...dsnParaObjeto(dsn), max: 4, idleTimeoutMillis: 30000,
                       connectionTimeoutMillis: 3000 });
     pool.on('error', () => {});   // nao deixa o erro do pool derrubar o app
   } catch (e) {
@@ -157,7 +267,8 @@ function getPool() {
 
 // Devolve o MESMO formato do psql -t -A -F'|', para o resto do codigo nao mudar.
 async function psql(sql) {
-  const p = getPool();
+  const { dsn } = await fonteAtual();
+  const p = getPool(dsn);
   if (p) {
     try {
       const r = await p.query(sql);
@@ -171,7 +282,7 @@ async function psql(sql) {
     }
   }
   // fallback: psql direto e, por ultimo, docker exec
-  const r1 = await run('psql', [DSN, '-t', '-A', '-F', '|', '-c', sql]);
+  const r1 = await run('psql', [dsn, '-t', '-A', '-F', '|', '-c', sql]);
   if (r1.ok) return r1;
   return run('docker', ['exec', 'mercado-db', 'psql', '-U', 'postgres',
     '-d', 'mercado', '-t', '-A', '-F', '|', '-c', sql]);
@@ -252,7 +363,8 @@ async function getCandles(min = 30, bucket = 60) {
 
 module.exports = {
   psql,
-  REPO, VENV_PY, LOG_DIR, DSN, run,
+  REPO, VENV_PY, LOG_DIR, DSN_LOCAL, run,
+  fonteAtual, config, tunel,
   getStatus, dbStats, startCollection, stopCollection, runAnalysis, tailLog, listLogs,
   getBook, getCandles,
 };

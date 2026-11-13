@@ -22,6 +22,7 @@
     <span class="pill" data-k="bridge"><i></i>Ponte</span>
     <span class="pill" data-k="docker"><i></i>Banco</span>
     <span class="pill" data-k="collector"><i></i>Coletor</span>
+    <span class="pill" data-k="fonte"><i></i>Local</span>
   </div>
 
   <div class="tb-right">
@@ -189,6 +190,43 @@
       </div>
 
       <div class="modal-body">
+
+          <div class="secao-titulo">Fonte dos dados</div>
+
+          <div class="campo">
+            <div>
+              <div class="campo-lbl">Painel lê de
+                <span class="info" data-tip="Fonte dos dados
+Onde a captura roda e de onde o painel lê.
+
+Esta máquina: MT5 e banco aqui.
+VM Inovatech: MT5 e banco na VM, lidos por túnel SSH.
+Nesse modo o app daqui só visualiza — nada é capturado localmente."></span>
+              </div>
+              <div class="campo-dica">onde a captura roda e de onde o painel lê</div>
+            </div>
+            <select id="cfg-fonte">
+              <option value="local">Esta máquina</option>
+              <option value="vm">VM Inovatech</option>
+            </select>
+          </div>
+
+          <div id="cfg-vm" class="cfg-vm">
+            <div class="campo">
+              <div><div class="campo-lbl">Host</div><div class="campo-dica">IP da VM na rede interna</div></div>
+              <input id="cfg-vm-host" spellcheck="false" autocomplete="off">
+            </div>
+            <div class="campo">
+              <div><div class="campo-lbl">Usuário SSH</div></div>
+              <input id="cfg-vm-user" spellcheck="false" autocomplete="off">
+            </div>
+            <div class="campo">
+              <div><div class="campo-lbl">Porta local</div><div class="campo-dica">onde o túnel escuta aqui</div></div>
+              <input id="cfg-vm-porta" type="number" min="1024" max="65535">
+            </div>
+            <div id="cfg-vm-estado" class="cfg-estado">—</div>
+          </div>
+
         <div class="secao-titulo">Atualização da interface</div>
 
         <div class="campo">

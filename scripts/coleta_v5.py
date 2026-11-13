@@ -9,7 +9,7 @@ MUDANCAS SOBRE O v4:
   P0.4  grava t_recv_ns (relogio local, em torno da chamada) e thread_id.
   P0.7  preco/volume inteiros no banco.
 """
-import os, argparse, queue, threading, time
+import os, sys, argparse, queue, threading, time
 from datetime import datetime, timezone, timedelta
 import rpyc, psycopg2
 from psycopg2.extras import execute_values
@@ -46,11 +46,31 @@ def delta_por_preco(antes, agora, ts, sym):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--simbolo", default="WINZ26")
+    ap.add_argument("--simbolo", default="auto",
+                    help="'auto' detecta o contrato da frente por LIQUIDEZ")
     ap.add_argument("--flush-seg", type=float, default=10.0)   # aceita fracao: 0.1 = 10x/s
-    a = ap.parse_args(); sym = a.simbolo
+    a = ap.parse_args()
+
+    def resolve_simbolo():
+        """Contrato da frente. 'auto' usa o volume negociado, nao a cotacao mais
+        recente — a regra antiga do servidor pegava o contrato iliquido quando
+        ele tinha um quote mais novo (WINZ26 com 4,5M x WING27 com 6k)."""
+        if a.simbolo != "auto":
+            return a.simbolo
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from detecta_contrato import detecta
+            d = detecta()
+            if d:
+                return d
+        except Exception as e:
+            print(f">>> detecta_contrato falhou: {e}", flush=True)
+        return "WINZ26"
+
+    sym = resolve_simbolo()
     if not sym.upper().startswith("WIN"):
         raise SystemExit(f">>> so series WIN. recebido: {sym}")
+    print(f">>> contrato: {sym}", flush=True)
 
     c_book, m_book = conecta(com_book=True, sym=sym); time.sleep(2)
     b0 = m_book.market_book_get(sym)
