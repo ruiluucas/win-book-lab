@@ -50,10 +50,10 @@ Compressão ativa após 2 dias (~5,2 B/linha), retenção de 2 anos.
 | book por snapshot | **10 linhas** |
 | taxa do book | ~9,5 mudanças/s → **~95 linhas/s** |
 | book por dia (9h) | **~3,1 M linhas** → ~16 MB comprimido |
-| tick por dia (9h) | **~4,0 M linhas** → ~21 MB comprimido |
-| RAM do banco | **989 MB** |
+| tick por dia (9h) | **~350 mil linhas** (10-12 ticks/s) → ~5,7 MB comprimido |
+| RAM do banco | **~1 GB** |
 | CPU do banco | **<1 %** |
-| ano (250 pregões) | **~9 GB** comprimido |
+| ano (250 pregões) | **~4 GB** comprimido (book 3,4 + tick 0,7) |
 
 ## Armadilhas (todas custaram tempo)
 

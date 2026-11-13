@@ -83,3 +83,33 @@ CREATE TABLE IF NOT EXISTS coleta_log (
     observacao  text,
     PRIMARY KEY (inicio, symbol)
 );
+
+-- ---------------------------------------------------------------------------
+-- P0.7 (13/11/2026): preco e volume como INTEGER.
+-- float em chave de comparacao e fonte de erro: 174240.0 != 174240 em igualdade
+-- exata, e o delta por preco depende dessa igualdade.
+-- ---------------------------------------------------------------------------
+-- ALTER TABLE book
+--   ALTER COLUMN preco  TYPE integer USING (preco::integer),
+--   ALTER COLUMN volume TYPE integer USING (volume::integer);
+
+-- P0.1: delta chaveado por PRECO, nao por nivel.
+CREATE TABLE IF NOT EXISTS book_delta_v2 (
+    ts        timestamptz NOT NULL,
+    symbol    text        NOT NULL,
+    lado      smallint    NOT NULL,   -- 1=ask 2=bid
+    preco     integer     NOT NULL,   -- PONTOS
+    vol_antes integer,
+    vol_agora integer,
+    delta     integer,
+    evento    text        -- entrou_janela | saiu_janela | vol_up | vol_down
+);
+SELECT create_hypertable('book_delta_v2', by_range('ts', INTERVAL '1 day'), if_not_exists => TRUE);
+CREATE INDEX IF NOT EXISTS bd2_idx ON book_delta_v2 (symbol, lado, preco, ts DESC);
+SELECT add_compression_policy('book_delta_v2', INTERVAL '2 days', if_not_exists => TRUE);
+SELECT add_retention_policy('book_delta_v2', INTERVAL '2 years', if_not_exists => TRUE);
+
+-- P0.3: sem flags do servidor (copy_ticks_* = 0). Agressor e INFERIDO.
+-- ALTER TABLE tick ADD COLUMN IF NOT EXISTS lado_inferido smallint;
+--   1 = comprador agressor (last>=ask) | -1 = vendedor (last<=bid) | 0 = indefinido
+-- P0.4: ALTER TABLE tick ADD COLUMN IF NOT EXISTS t_recv_ns bigint;
