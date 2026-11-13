@@ -3,9 +3,16 @@
 Captura **tick a tick** do book de ofertas do WIN (mini-índice da B3) via MetaTrader 5,
 com **delta por nível**, e mede se isso tem poder preditivo.
 
-**Status em 13/11/2026:** infraestrutura validada. Coleta 100% das mudanças do book.
-**Nenhum edge foi demonstrado ainda** — e este documento explica por que a amostra atual
-não permite afirmar nada em nenhuma direção.
+**Status em 13/11/2026:** infraestrutura **em validação**. Nenhum edge demonstrado.
+
+> A amostra de 80 min coletada neste dia é **exploratória e está queimada** — não será
+> reutilizada como confirmação. O protocolo de confirmação está em
+> [`docs/PROTOCOLO.md`](docs/PROTOCOLO.md) e foi congelado **antes** de olhar dados novos.
+
+A taxa de captura de 100% que constava aqui **não foi verificada** de forma independente:
+foi medida com o mesmo polling que se queria validar (circular). O verificado é que o
+coletor grava ~8,3 snapshots/s em mercado calmo, sem duplicatas e com 10 linhas por
+snapshot.
 
 > Este repositório foi escrito para ser **auditado**. A seção
 > [O que auditar](#o-que-auditar) lista as afirmações que precisam de verificação
@@ -19,8 +26,8 @@ não permite afirmar nada em nenhuma direção.
 Trader individual na B3, WIN futuro, 1 contrato, custo de **R$ 0,50 por round trip**
 (RLP ativo na BTG). Stop operacional de 180 pts = R$ 36. Capital R$ 800.
 
-O custo em pontos é **5 pts** (2,5 pts de custo + margem). A pergunta que importa não é
-"o preço vai subir?", é:
+O custo em pontos é **7,5 pts**: 5 de spread (comprar no ask, vender no bid) mais 2,5
+de corretagem (R$ 0,50 ÷ R$ 0,20/pt). A pergunta que importa não é "o preço vai subir?", é:
 
 > **existe algum conjunto de operações onde o movimento esperado cobre custo + prêmio de risco?**
 
@@ -128,8 +135,13 @@ Se o horizonte é 3 min e a coleta é a cada 175 ms, cada evento de 3 min conté
 | todas as obs + Newey-West | 54,9% | 4,01 | 0,0001 | "edge!" ❌ |
 | **só obs independentes (n=26)** | **50,0%** | **0,03** | **0,98** | **ruído** ✅ |
 
-**O Newey-West não resolve sobreposição massiva.** A única régua confiável é amostrar
-1 observação a cada `h` minutos — sem correção nenhuma.
+**O motivo técnico:** HAC (Newey-West) só é válido com largura de banda **≥ o
+comprimento da sobreposição em observações** — ~1.030 para h=3 min a 175 ms. Com
+n = 20 mil isso é inviável, e o lag padrão **subestima** o erro-padrão.
+
+Régua primária: **amostragem sem sobreposição**. Complementos: sub-amostragem com vários
+offsets (reportando média e dispersão entre eles), bootstrap em blocos e erro-padrão por
+**cluster de sessão**.
 
 ### Poder estatístico
 
@@ -146,11 +158,11 @@ Detectar acerto de 55% contra 50% (teste bicaudal, p<0,05, poder 80%) exige
 
 ## 6. Resultados até agora
 
-### Sinal do OBI (desequilíbrio do book)
+**Nada conclusivo. A amostra é de uma sessão parcial e está queimada.**
 
-`OBI_5 = (volume_BUY − volume_SELL) / (volume_BUY + volume_SELL)`, 5 níveis por lado.
+### OBI nas observações independentes (80 min)
 
-Com **80 minutos** de coleta, nas observações **independentes**:
+`OBI_5 = (vol_BUY − vol_SELL)/(vol_BUY + vol_SELL)`, 5 níveis por lado.
 
 | h | n indep | acerto | pts/op | p | veredito |
 |---|---:|---:|---:|---:|---|
@@ -159,33 +171,45 @@ Com **80 minutos** de coleta, nas observações **independentes**:
 | 3 min | 26 | 50,0% | +0,6 | 0,98 | ruído |
 | 5 min | 16 | 62,5% | +50,6 | 0,14 | ruído |
 
-**Nada é significativo.** Com as observações sobrepostas, o mesmo dado dava
-acerto 54,9% e t=4,01 — que é artefato.
+Com as observações sobrepostas o mesmo dado dava acerto 54,9% e t=4,01 — **artefato**.
 
-### O que o delta revela
+### Delta do book — números CORRIGIDOS (P0.1 e P0.2)
 
-Em 1 minuto de coleta:
+A versão anterior deste README dizia "~97% churn" e "só 1% empurra o preço". **Ambos
+eram artefato de chavear o delta por nível em vez de por preço** — quando o melhor preço
+desliza 1 tick, os 5 níveis trocam de preço e o delta compara coisas diferentes.
 
-| lado | contratos adicionados | removidos | líquido |
-|---|---:|---:|---:|
-| BID (compra) | +46.051 | −44.486 | **+1.565** |
-| ASK (venda) | +18.975 | −18.944 | **+31** |
+| métrica | antes (por nível) | **agora (por preço)** |
+|---|---|---|
+| churn | "~97%" | **25% da movimentação** |
+| disso, execução | não medido | **1,7%** |
+| disso, cancelamento | "~97%" | **98,3%** |
+| "só 1% empurra o preço" | publicado | **removido** — não sustentado |
 
-**O book do WIN é ~97% churn.** 46 mil contratos aparecem no bid em 60 segundos e 44 mil
-somem. Só ~1% do volume do book empurra o preço. Isso é invisível no estado agregado e é
-exatamente o que o delta existe para expor.
+**O que os 25% significam:** os outros 75% da "movimentação" são preço entrando e saindo
+da janela de 5 níveis do MT5 — **não é ordem, é limitação de amostragem**.
 
-### Limitações do MT5/BTG (medidas, não supostas)
+**Prova de que o delta está correto:** `scripts/testa_ida_volta.py` → **1248/1248**
+snapshots reconstruídos exatamente.
+
+### Lado agressor — inferido, não observado
+
+`copy_ticks_from` retorna **0** em qualquer janela (1, 5, 15, 60 min), com
+`COPY_TICKS_ALL` e `COPY_TICKS_TRADE`. **Não há flags de agressor nesta conta.**
+O `lado_inferido` usa a regra do tick: 85.196 contratos de comprador agressor contra
+84.786 de vendedor, e **1,8% indefinidos** (negócio no meio do spread).
+
+### Limitações do MT5/BTG (medidas)
 
 | item | resultado |
 |---|---|
 | `ticks_bookdepth` do WIN | **5 níveis por lado** — teto do servidor |
 | ordem dos preços | vem com o **pior preço primeiro** (melhor bid = `max`, melhor ask = `min`) |
-| `market_book_get` após `market_book_add` | **0 entradas** por ~1 s — precisa esperar |
-| tipos no book | só 1 (SELL) e 2 (BUY); 3 e 4 (MARKET) não aparecem |
-| **tick histórico** | **NÃO EXISTE** — `copy_ticks_*` = 0 em todos os símbolos, `last_error = Success` |
+| `market_book_get` após `market_book_add` | **0 entradas** por ~1 s |
+| tipos no book | só 1 (SELL) e 2 (BUY); 3 e 4 não aparecem |
+| **tick histórico** | **não existe** — `copy_ticks_*` = 0, `last_error = Success` |
 | `time` do MT5 | hora do **servidor** (BRT), não UTC |
-| `BookInfo.index` | é **método**, não atributo |
+| latência da ponte | **6 ms** medidos no v5 (era 45 ms) |
 
 ## 7. O que auditar
 
@@ -260,31 +284,43 @@ rpyc psycopg2-binary pandas numpy scipy
 
 ## 10. Referências
 
+> **Status de verificação:** as referências marcadas **(não confirmado)** vieram de uma
+> coleta automatizada e **não foram validadas independentemente** por DOI/veículo/páginas.
+> Os números atribuídos a elas foram **removidos deste README** até verificação.
+> Auditar em `docs/REFERENCIAS_AUDITORIA.md`.
+
+**Confirmadas (DOI/veículo/páginas checados):**
+
 - **López de Prado, M. (2018).** *Advances in Financial Machine Learning.* Wiley.
-  Cap. 3 (triple-barrier, meta-labeling), cap. 4 (sample weights / overlapping outcomes),
-  cap. 7 (purged K-fold com embargo), cap. 12 (CPCV).
-- **Sirignano, J. & Cont, R. (2019).** "Universal features of price formation in financial
-  markets." *Quantitative Finance* 19(9):1449–1459. arXiv:1803.06917.
-  → as features que funcionam em tick são de **book** (depth, imbalance), não de fita.
+  ISBN 9781119482086. Cap. 3 (triple-barrier), cap. 4 (sample weights / overlapping
+  outcomes), cap. 7 (purged K-fold com embargo), cap. 12 (CPCV).
+- **Sirignano, J. & Cont, R. (2019).** "Universal features of price formation in
+  financial markets." *Quantitative Finance* 19(9):1449–1459.
+  DOI [10.1080/14697688.2019.1571683](https://doi.org/10.1080/14697688.2019.1571683) · arXiv:1803.06917.
+  → features de **book** (profundidade, desequilíbrio) carregam informação sobre o
+  próximo movimento; o estudo usa book de ações (NASDAQ). **Não afirma** que features
+  de fita são mais fracas — essa extrapolação foi removida.
 - **Ait-Sahalia, Mykland & Zhang (2005).** "How Often to Sample a Continuous-Time Process
   in the Presence of Market Microstructure Noise." *RFS* 18(2):351–416.
-  → em tick, a variância do ruído ≈ variância do retorno. Amostrar mais fino piora o SNR.
-- **Gu, Kelly & Xiu (2020).** "Empirical Asset Pricing via Machine Learning." *RFS* 33(5).
-  → teto realista de R²_oos: GBRT 0,34%, NN3 0,40%. O melhor modelo explica fração de 1%.
-- **Baldo, Morais & Silva (2026).** "Comparação de classificadores supervisionados para
-  previsão direcional de minicontratos futuros de índice e dólar." ENEGEP, ABEPRO.
-  → WIN e WDO, 10/20/30 min, 275 atributos: ROC 0,50–0,65. **Logistic venceu os ensembles
-  de árvore.** Atributos de preço/volume/indicadores "não foram suficientes".
-- **Grądzki, Wójcik & Lessmann (2025).** "Algorithmic crypto trading using information-driven
-  bars, triple barrier labeling and deep learning." *Financial Innovation* 11.
-  → triple barrier + CUSUM: performance positiva **após custos** (tick, crypto, 2018–2023).
-- **Kili et al. (2025).** "Adaptive Event-Driven Labeling." *Applied Sciences* 15(24):13204.
-  → Sharpe: AEDL 0,48 · Fixed Horizon **−0,29** · Triple Barrier **−0,03**.
-  → o alvo de horizonte fixo é o pior dos três.
-- **Bhand & Joshi (2026).** "The Illusion of Alpha: Quantifying Hidden Data Leakage in
-  Financial Machine Learning." DOI 10.21203/rs.3.rs-9180656/v1.
-  → vazamento em normalização rolling infla Sharpe de 0,15 para 1,15–2,84,
-  **com a maior inflação no XGBoost.**
+  → a frequência ótima de amostragem para **estimar volatilidade** pode ser finita sob
+  ruído de microestrutura. **É sobre estimação de volatilidade, não sobre previsão
+  direcional** — a extensão "amostrar mais fino piora o SNR de previsão" é minha, não
+  deles, e foi removida do README.
+- **Cont, Kukanov & Stoikov (2014).** "The Price Impact of Order Book Events."
+  *Journal of Financial Econometrics* 12(1):47–88.
+  → define o **OFI** (order flow imbalance), a feature primária do protocolo.
+
+**Não confirmadas — números removidos:**
+
+- *Baldo, Morais & Silva (2026), ENEGEP/ABEPRO* — usada antes como "ROC 0,50–0,65 no WIN".
+  **Não confirmado.**
+- *Grądzki, Wójcik & Lessmann (2025), Financial Innovation* — **não confirmado.**
+- *Kili et al. (2025), Applied Sciences* — **não confirmado.**
+- *Bhand & Joshi (2026), Research Square* — **não confirmado**; se existir, é **preprint
+  sem revisão por pares**.
+- *Gu, Kelly & Xiu (2020), RFS* — referência real, mas o R²_oos de 0,34–0,40% é de
+  **retornos mensais em cross-section de ações**, **não** um "teto realista" para tick
+  intradiário de um futuro. **Removido como teto.**
 
 ## 11. Estrutura do repositório
 
