@@ -47,6 +47,34 @@ app/
 A logica fica em `lib/lab.js`, sem dependencia do Electron, para poder ser testada
 com `node` puro. `main.js` so registra os handlers de IPC e cria a janela.
 
+## Configurações
+
+Engrenagem no header. Fica salvo em `localStorage` (`winbooklab.cfg`).
+
+| campo | o que muda | padrão |
+|---|---|---|
+| Gráfico | redraws por segundo | 5×/s (200 ms) |
+| Book e status | cadência do ladder | 2,5×/s (400 ms) |
+| Métricas do dia | consulta pesada | 1×/3 s |
+| Timeframe inicial | janela que abre | 1 min |
+| Custo base / fator | parâmetros da análise | 7,5 pts / 2× |
+
+## Desempenho — de onde vinha a lentidão
+
+Três gargalos medidos, cada um resolvido com o número na mão:
+
+| gargalo | antes | depois |
+|---|---|---|
+| **flush do coletor** | `time.sleep(1)` no loop tornava `--flush-seg` < 1 impossível | loop dorme 50 ms; flush a **10×/s** |
+| **consulta do book** | CTE com `max()` sobre 5 min = 231 ms | subconsulta com índice = **3 ms** |
+| **consulta do gráfico** | janela inteira a cada ciclo (209 ms em 120 min) | incremental busca 3 min (**7 ms**) |
+
+Também trocado `docker exec psql` (169 ms por consulta) por um **pool `pg`** persistente
+(3–5 ms). O `psql` e o `docker exec` ficam como fallback.
+
+Resultado: gráfico de 5×/s real (10×/s se configurado), book com 5 níveis a 2,5×/s,
+e o banco recebendo a cada 100 ms com lag de ~0,1 s.
+
 ## Testes
 
 ```bash

@@ -8,7 +8,7 @@ LOG="$REPO/logs/coleta_auto.log"
 mkdir -p "$(dirname "$LOG")"
 
 PY="$HOME/Projetos/quant-lab/.venv/bin/python"
-FLUSH_SEG="${FLUSH_SEG:-2}"      # grava no banco a cada N segundos (era 15: o painel parecia travado)
+FLUSH_SEG="${FLUSH_SEG:-0.1}"    # grava a cada N segundos (0.1 = 10x/s). Era 15: o painel parecia travado.
 
 # O coletor le o DSN de MERCADO_DSN (o default dele nao serve). Pega do .env do
 # quant-lab se existir; senao usa o DSN local do container mercado-db.

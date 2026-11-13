@@ -129,9 +129,16 @@ h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;
 .seg{display:flex;gap:2px;background:var(--bg);border:1px solid var(--border);
   border-radius:7px;padding:2px}
 .seg button{background:transparent;border:0;color:var(--dim);font-size:11px;
-  font-family:inherit;padding:4px 11px;border-radius:5px;cursor:pointer;transition:.12s}
-.seg button:hover{color:var(--txt)}
-.seg button.on{background:var(--panel2);color:var(--txt)}
+  font-family:inherit;padding:4px 11px;border-radius:5px;cursor:pointer;
+  transition:.12s;font-weight:500}
+.seg button:hover{color:var(--txt);background:rgba(255,255,255,.05)}
+/* ativo tem que ser OBVIO: antes era panel2 sobre panel, quase invisivel,
+   e o usuario achava que o clique nao pegava */
+.seg button.on{
+  background:var(--accent); color:#fff; font-weight:600;
+  box-shadow:0 2px 10px rgba(79,140,255,.45);
+}
+.seg button.on:hover{background:#3d7bf0}
 
 /* book ladder */
 .book-panel{display:flex;flex-direction:column;margin-bottom:0}
@@ -192,3 +199,111 @@ h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#2a3245;border-radius:5px}
 ::-webkit-scrollbar-thumb:hover{background:#39445c}
+
+/* rotulo do timeframe ativo, ao lado do titulo do grafico */
+.tf-atual{
+  font-size:10px;font-weight:600;letter-spacing:.4px;
+  color:var(--accent);background:rgba(79,140,255,.13);
+  border:1px solid rgba(79,140,255,.35);border-radius:5px;
+  padding:1px 7px;margin-left:8px;font-family:var(--mono);
+}
+
+/* ================= ACOES NO HEADER ================= */
+.abtn{
+  width:34px;height:30px;display:grid;place-items:center;
+  background:var(--panel);border:1px solid var(--border);border-radius:7px;
+  cursor:pointer;color:var(--dim);transition:.13s;flex:none;
+  -webkit-app-region:no-drag;
+}
+.abtn svg{width:14px;height:14px}
+.abtn svg{fill:none;stroke:currentColor;
+  stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.abtn:hover:not(:disabled){background:var(--panel2);color:var(--txt);border-color:var(--border)}
+.abtn:disabled{opacity:.28;cursor:not-allowed}
+.abtn.primary{color:var(--ok)}
+.abtn.primary:hover:not(:disabled){background:rgba(47,191,113,.14);border-color:rgba(47,191,113,.35)}
+.abtn.danger{color:var(--bad)}
+.abtn.danger:hover:not(:disabled){background:rgba(229,72,77,.13);border-color:rgba(229,72,77,.35)}
+
+.tb-sep{width:1px;height:18px;background:var(--border);margin:0 4px;flex:none}
+
+/* mensagem curta no header; nao empurra os botoes */
+.ctl-msg{
+  font-size:10px;font-family:var(--mono);color:var(--dim);
+  max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  -webkit-app-region:no-drag;margin-right:2px;
+}
+.ctl-msg.ok{color:var(--ok)} .ctl-msg.bad{color:var(--bad)}
+
+/* tooltip do header abre para baixo e fica centrado no botao */
+.tb-right [data-tip]:hover::after{top:calc(100% + 10px);max-width:260px}
+
+/* ================= TOOLTIP SEM VAZAR DA TELA ================= */
+/* o JS marca .tip-inv quando nao cabe a direita e .tip-up quando nao cabe embaixo */
+[data-tip].tip-inv:hover::after{
+  left:auto; right:0; transform:none;
+}
+[data-tip].tip-up:hover::after{
+  top:auto; bottom:calc(100% + 8px);
+}
+/* tooltip perto do topo abre para baixo; perto do rodape, para cima */
+
+/* ================= MODAL DE CONFIGURACOES ================= */
+.modal-fundo{
+  position:fixed; inset:0; z-index:400; display:none;
+  background:rgba(5,8,13,.72); backdrop-filter:blur(3px);
+  align-items:center; justify-content:center; padding:24px;
+}
+.modal-fundo.aberto{display:flex}
+
+.modal{
+  width:min(560px,100%); max-height:calc(100vh - 80px); overflow:auto;
+  background:var(--panel); border:1px solid var(--border); border-radius:12px;
+  box-shadow:0 24px 70px rgba(0,0,0,.65);
+  animation:sobe .16s ease-out;
+}
+@keyframes sobe{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+
+.modal-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 18px; border-bottom:1px solid var(--border);
+  position:sticky; top:0; background:var(--panel); border-radius:12px 12px 0 0;
+}
+.modal-head h3{font-size:13px;text-transform:uppercase;letter-spacing:.7px;font-weight:600}
+.modal-body{padding:16px 18px}
+.modal-foot{
+  display:flex; justify-content:flex-end; gap:8px;
+  padding:14px 18px; border-top:1px solid var(--border);
+  position:sticky; bottom:0; background:var(--panel); border-radius:0 0 12px 12px;
+}
+
+.campo{display:grid;grid-template-columns:1fr 170px;gap:10px;align-items:center;
+  padding:9px 0;border-bottom:1px solid rgba(34,43,61,.55)}
+.campo:last-child{border-bottom:0}
+.campo-lbl{font-size:12px;color:var(--txt)}
+.campo-dica{font-size:10px;color:var(--dim);margin-top:2px;font-family:var(--mono)}
+.campo select,.campo input[type=number]{
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  color:var(--txt);padding:6px 9px;font-size:12px;font-family:var(--mono);width:100%;
+}
+.campo select:focus,.campo input:focus{outline:none;border-color:var(--accent)}
+.secao-titulo{
+  font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:var(--dim);
+  margin:16px 0 6px;
+}
+.secao-titulo:first-child{margin-top:0}
+
+.btn-modal{
+  border:1px solid var(--border);background:var(--panel2);color:var(--txt);
+  border-radius:7px;padding:8px 16px;font-size:12px;font-family:inherit;cursor:pointer;
+  transition:.13s;
+}
+.btn-modal:hover{background:#1d2537}
+.btn-modal.prim{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-modal.prim:hover{background:#3d7bf0}
+
+.aviso-config{
+  font-size:11px;color:var(--warn);background:rgba(240,180,41,.09);
+  border:1px solid rgba(240,180,41,.28);border-radius:7px;
+  padding:9px 11px;margin-top:12px;line-height:1.5;
+}

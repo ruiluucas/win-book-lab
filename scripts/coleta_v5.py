@@ -47,7 +47,7 @@ def delta_por_preco(antes, agora, ts, sym):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--simbolo", default="WINZ26")
-    ap.add_argument("--flush-seg", type=int, default=10)
+    ap.add_argument("--flush-seg", type=float, default=10.0)   # aceita fracao: 0.1 = 10x/s
     a = ap.parse_args(); sym = a.simbolo
     if not sym.upper().startswith("WIN"):
         raise SystemExit(f">>> so series WIN. recebido: {sym}")
@@ -153,9 +153,13 @@ def main():
     threading.Thread(target=th_tick, daemon=True).start()
     print(">>> v5: delta POR PRECO + lado_inferido + timestamps", flush=True)
     try:
+        # O sleep tem que ser MENOR que o flush_seg, senao o loop so acorda 1x/s e
+        # qualquer flush_seg < 1 e ignorado (era o que travava o painel).
+        passo = min(0.05, a.flush_seg)
         while datetime.now(BRT).hour < 18:
-            time.sleep(1)
-            if time.time()-ult >= a.flush_seg: flush(); ult = time.time()
+            time.sleep(passo)
+            if time.time()-ult >= a.flush_seg:
+                flush(); ult = time.time()
     except KeyboardInterrupt: print("\n>>> interrompido", flush=True)
     finally:
         parar.set(); time.sleep(1); flush()

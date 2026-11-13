@@ -52,8 +52,7 @@ SELECT
 `;
 
 async function dbStats() {
-  const r = await run('docker', ['exec', 'mercado-db', 'psql', '-U', 'postgres',
-    '-d', 'mercado', '-t', '-A', '-F', '|', '-c', SQL]);
+  const r = await psql(SQL);
   if (!r.ok) return { erro: r.err.split('\n')[0] || 'banco indisponivel' };
   const p = r.out.split('\n')[0].split('|');
   if (p.length < 6) return { erro: 'resposta inesperada: ' + r.out.slice(0, 80) };
@@ -119,18 +118,80 @@ function listLogs() {
 }
 
 
+
+// ---------- SQL ----------
+// Conexao PERSISTENTE via `pg`. Cada `psql`/`docker exec` custa 130-170 ms so para
+// subir o processo; um pool responde em 2-5 ms. Era isso que limitava o grafico a
+// ~5/s e o book a ~2,9/s (medido 13/11).
+let pool = null;
+let poolFalhou = false;
+
+function dsnParaObjeto(dsn) {
+  const o = {};
+  for (const par of dsn.split(/\s+/)) {
+    const [k, ...v] = par.split('=');
+    if (!k) continue;
+    const val = v.join('=');
+    if (k === 'host') o.host = val;
+    else if (k === 'port') o.port = parseInt(val, 10);
+    else if (k === 'dbname') o.database = val;
+    else if (k === 'user') o.user = val;
+    else if (k === 'password') o.password = val;
+  }
+  return o;
+}
+
+function getPool() {
+  if (pool || poolFalhou) return pool;
+  try {
+    const { Pool } = require('pg');
+    pool = new Pool({ ...dsnParaObjeto(DSN), max: 4, idleTimeoutMillis: 30000,
+                      connectionTimeoutMillis: 3000 });
+    pool.on('error', () => {});   // nao deixa o erro do pool derrubar o app
+  } catch (e) {
+    poolFalhou = true;
+    pool = null;
+  }
+  return pool;
+}
+
+// Devolve o MESMO formato do psql -t -A -F'|', para o resto do codigo nao mudar.
+async function psql(sql) {
+  const p = getPool();
+  if (p) {
+    try {
+      const r = await p.query(sql);
+      // Date vira ISO: o join cru produzia 'Fri Nov 13 2026 ...' e quebrava o SQL seguinte
+      const out = r.rows
+        .map(row => Object.values(row).map(v => (v instanceof Date ? v.toISOString() : v)).join('|'))
+        .join('\n');
+      return { ok: true, out, err: '', code: 0 };
+    } catch (e) {
+      // cai para o caminho lento abaixo
+    }
+  }
+  // fallback: psql direto e, por ultimo, docker exec
+  const r1 = await run('psql', [DSN, '-t', '-A', '-F', '|', '-c', sql]);
+  if (r1.ok) return r1;
+  return run('docker', ['exec', 'mercado-db', 'psql', '-U', 'postgres',
+    '-d', 'mercado', '-t', '-A', '-F', '|', '-c', sql]);
+}
+
 // ---------- BOOK AO VIVO ----------
+// UMA consulta com subconsulta. Nao da para ir e voltar ao Node com o timestamp:
+// o driver `pg` trunca em milissegundos e o WHERE ts = '<iso>' nao casa com a
+// precisao real da coluna (microssegundos). A subconsulta mantem a precisao.
+// Medido no pool: 3-7 ms. A CTE antiga com max() sobre 5 min levava 257 ms.
 const SQL_BOOK = `
-WITH u AS (SELECT max(ts) t FROM book WHERE ts >= now() - interval '5 minutes')
-SELECT b.lado, b.nivel, b.preco, b.volume
-FROM book b, u WHERE b.ts = u.t
-ORDER BY b.lado DESC, b.nivel;
+SELECT lado, nivel, preco, volume FROM book
+WHERE ts = (SELECT ts FROM book ORDER BY ts DESC LIMIT 1)
+ORDER BY lado DESC, nivel;
 `;
 
 async function getBook() {
-  const r = await run('docker', ['exec', 'mercado-db', 'psql', '-U', 'postgres',
-    '-d', 'mercado', '-t', '-A', '-F', '|', '-c', SQL_BOOK]);
+  const r = await psql(SQL_BOOK);
   if (!r.ok) return { erro: r.err.split('\n')[0] || 'banco indisponivel' };
+
   const bids = [], asks = [];
   for (const ln of r.out.split('\n')) {
     if (!ln) continue;
@@ -139,16 +200,15 @@ async function getBook() {
     if (lado === '2') bids.push(item); else asks.push(item);
   }
   if (!bids.length || !asks.length) return { erro: 'sem book recente' };
+
   const bid = bids[0].preco, ask = asks[0].preco;
   const vb = bids.reduce((a, x) => a + x.volume, 0);
   const va = asks.reduce((a, x) => a + x.volume, 0);
   return {
-    bids, asks,
-    bid, ask,
+    bids, asks, bid, ask,
     mid: (bid + ask) / 2,
     spread: ask - bid,
-    // OBI dos 5 niveis: (Vbid - Vask) / (Vbid + Vask)
-    obi: (vb - va) / (vb + va),
+    obi: (vb - va) / (vb + va),   // OBI dos 5 niveis
     vbid: vb, vask: va,
   };
 }
@@ -177,8 +237,7 @@ FROM x GROUP BY b ORDER BY b;
 async function getCandles(min = 30, bucket = 60) {
   const m = Math.max(1, Math.min(180, parseInt(min, 10) || 30));
   const b = Math.max(5, Math.min(300, parseInt(bucket, 10) || 60));
-  const r = await run('docker', ['exec', 'mercado-db', 'psql', '-U', 'postgres',
-    '-d', 'mercado', '-t', '-A', '-F', '|', '-c', sqlCandles(m, b)]);
+  const r = await psql(sqlCandles(m, b));
   if (!r.ok) return { erro: r.err.split('\n')[0] || 'banco indisponivel', candles: [] };
   const candles = [];
   for (const ln of r.out.split('\n')) {
@@ -192,6 +251,7 @@ async function getCandles(min = 30, bucket = 60) {
 
 
 module.exports = {
+  psql,
   REPO, VENV_PY, LOG_DIR, DSN, run,
   getStatus, dbStats, startCollection, stopCollection, runAnalysis, tailLog, listLogs,
   getBook, getCandles,

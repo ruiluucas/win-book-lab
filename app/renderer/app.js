@@ -5,6 +5,9 @@ let volSeries = null;
 let minutos = 30;             // janela do grafico (min)
 let bucket = 60;              // segundos por candle
 let busySeries = false;
+let pendente = null;          // pedido que chegou enquanto outro rodava
+let geracao = 0;              // incrementa a cada troca de timeframe
+let geracaoAplicada = -1;     // qual geracao esta no grafico
 let ultimoSetData = 0;
 const TZ_OFFSET = 3 * 3600;   // MT5/banco guarda em UTC+0; exibimos BRT (UTC-3)
 
@@ -176,19 +179,39 @@ function paraChart(cs) {
 }
 
 async function carregaGrafico(completo = false) {
-  if (busySeries || !candleSeries) return;
+  if (!candleSeries) return;
+
+  // Se ja tem um pedido rodando, ENFILEIRA em vez de descartar. Descartar fazia
+  // o clique no timeframe se perder e o grafico ficar preso no anterior.
+  if (busySeries) {
+    pendente = { completo: completo || !!(pendente && pendente.completo) };
+    return;
+  }
+
+  const g = geracao;
+  const temDados = candleSeries.data().length > 0;
+  // Decide ANTES de buscar: carga completa precisa da janela toda; se pedirmos a
+  // janela curta e depois setData(), o grafico perde o historico.
+  const vaiCompleto = completo || g !== geracaoAplicada || !temDados
+    || (Date.now() - ultimoSetData > 30000);
+
   busySeries = true;
   try {
-    const r = await window.lab.candles(minutos, bucket);
+    // janela toda custa ~209 ms (120 min); janela curta custa ~7-12 ms.
+    const janela = vaiCompleto ? minutos : Math.max(3, Math.ceil((bucket * 2) / 60));
+    const r = await window.lab.candles(janela, bucket);
     if (r.erro || !r.candles || !r.candles.length) return;
+
+    // Se a geracao mudou enquanto buscava, este resultado e de outro timeframe.
+    if (g !== geracao) return;
+
     const { candles, vols } = paraChart(r.candles);
 
-    // setData completo a cada 30 s (backfill); entre isso, so o ultimo candle
-    const agora = Date.now();
-    if (completo || candles.length < 2 || agora - ultimoSetData > 30000) {
+    if (vaiCompleto) {
       candleSeries.setData(candles);
       volSeries.setData(vols);
-      ultimoSetData = agora;
+      ultimoSetData = Date.now();
+      geracaoAplicada = g;
     } else {
       candleSeries.update(candles[candles.length - 1]);
       volSeries.update(vols[vols.length - 1]);
@@ -197,6 +220,11 @@ async function carregaGrafico(completo = false) {
     console.error('grafico:', e);
   } finally {
     busySeries = false;
+    if (pendente) {                 // executa o que ficou na fila
+      const p = pendente;
+      pendente = null;
+      carregaGrafico(p.completo);
+    }
   }
 }
 
@@ -208,28 +236,39 @@ $('tf').addEventListener('click', e => {
   b.classList.add('on');
   minutos = parseInt(b.dataset.min, 10);
   bucket = parseInt(b.dataset.bucket, 10);
-  ultimoSetData = 0;             // forca setData completo ao trocar de janela
+  $('tf-atual').textContent = b.textContent.trim();   // rotulo visivel do timeframe
+  cfg.tf = `${minutos}:${bucket}`;                     // lembra a escolha para a proxima abertura
+  salvaConfig();
+  geracao++;                     // invalida qualquer busca em voo do timeframe anterior
+  ultimoSetData = 0;
   carregaGrafico(true);
 });
 
-// ==================== loop ====================
-async function tick() {
+// ==================== loops ====================
+// Separados por custo: dbStats conta a tabela do dia inteiro (caro), book e status
+// sao leves. Antes tudo ia junto a cada 1,5 s, entao o book nunca passava disso.
+async function tickLeve() {
   try {
-    const [s, d, b] = await Promise.all([
-      window.lab.status(), window.lab.dbstats(), window.lab.book(),
-    ]);
+    const [s, b] = await Promise.all([window.lab.status(), window.lab.book()]);
     paintStatus(s);
-    paintStats(d);
     paintBook(b);
-  } catch (e) {
-    console.error(e);
-  }
+  } catch (e) { console.error(e); }
 }
+
+async function tickStats() {
+  try {
+    paintStats(await window.lab.dbstats());
+  } catch (e) { console.error(e); }
+}
+
+async function tick() { await Promise.all([tickLeve(), tickStats()]); }
 
 // ==================== acoes ====================
 function msg(el, txt, kind) {
   el.textContent = txt;
-  el.className = 'msg' + (kind ? ' ' + kind : '');
+  // no header a classe e 'ctl-msg'; nos paineis continua 'msg'
+  const base = el.id === 'ctl-msg' ? 'ctl-msg' : 'msg';
+  el.className = base + (kind ? ' ' + kind : '');
 }
 
 $('btn-start').onclick = async () => {
@@ -270,6 +309,120 @@ async function rodar(method) {
 $('btn-tempo').onclick = () => rodar('tempo');
 $('btn-linhas').onclick = () => rodar('linhas');
 
+
+// ==================== TOOLTIP SEM VAZAR ====================
+// O ::after nao pode ser medido, entao estimamos pelo tamanho do texto e viramos
+// o tooltip para a esquerda quando ele passaria da borda direita, e para cima
+// quando passaria do rodape.
+function ajustaTooltip(el) {
+  const txt = el.getAttribute('data-tip') || '';
+  el.classList.remove('tip-inv', 'tip-up');
+
+  const r = el.getBoundingClientRect();
+  // largura estimada: o CSS limita em 300px, ~6.2px por caractere
+  const larg = Math.min(300, Math.max(120, txt.length * 6.2 + 24));
+  const centro = r.left + r.width / 2;
+  const passariaDireita = centro + larg / 2 > window.innerWidth - 10;
+  const passariaEsquerda = centro - larg / 2 < 10;
+  if (passariaDireita && !passariaEsquerda) el.classList.add('tip-inv');
+
+  // altura estimada: ~18px por linha de 42 caracteres
+  const linhas = Math.ceil(txt.length / 42) || 1;
+  const alt = linhas * 17 + 20;
+  if (r.bottom + 8 + alt > window.innerHeight - 10) el.classList.add('tip-up');
+}
+
+document.addEventListener('mouseover', e => {
+  const el = e.target.closest('[data-tip]');
+  if (el) ajustaTooltip(el);
+});
+
+// ==================== CONFIGURACOES ====================
+const CFG_PADRAO = {
+  grafico: 200,     // ms entre redraws do grafico
+  book: 400,        // ms entre redraws do book/status
+  metricas: 3000,   // ms entre consultas pesadas
+  tf: '30:60',      // timeframe inicial "min:bucket"
+  custo: 7.5,
+  fator: 2,
+};
+let cfg = { ...CFG_PADRAO };
+let timers = {};
+
+function carregaConfig() {
+  try {
+    const salvo = JSON.parse(localStorage.getItem('winbooklab.cfg') || '{}');
+    cfg = { ...CFG_PADRAO, ...salvo };
+  } catch { cfg = { ...CFG_PADRAO }; }
+}
+
+function salvaConfig() {
+  try { localStorage.setItem('winbooklab.cfg', JSON.stringify(cfg)); } catch {}
+}
+
+function aplicaTimers() {
+  clearInterval(timers.grafico);
+  clearInterval(timers.book);
+  clearInterval(timers.metricas);
+  timers.grafico = setInterval(() => carregaGrafico(false), cfg.grafico);
+  timers.book = setInterval(tickLeve, cfg.book);
+  timers.metricas = setInterval(tickStats, cfg.metricas);
+}
+
+function aplicaTimeframe(valor) {
+  const [min, buck] = String(valor).split(':').map(Number);
+  minutos = min; bucket = buck;
+  geracao++; ultimoSetData = 0;
+  // marca o botao correspondente
+  [...$('tf').children].forEach(b => {
+    const on = b.dataset.min === String(min);
+    b.classList.toggle('on', on);
+    if (on) $('tf-atual').textContent = b.textContent.trim();
+  });
+  carregaGrafico(true);
+}
+
+function abreConfig() {
+  $('cfg-grafico').value = String(cfg.grafico);
+  $('cfg-book').value = String(cfg.book);
+  $('cfg-metricas').value = String(cfg.metricas);
+  $('cfg-tf').value = cfg.tf;
+  $('cfg-custo').value = String(cfg.custo);
+  $('cfg-fator').value = String(cfg.fator);
+  $('modal-config').classList.add('aberto');
+}
+
+function fechaConfig() {
+  $('modal-config').classList.remove('aberto');
+}
+
+function aplicarConfigDaTela() {
+  cfg.grafico = parseInt($('cfg-grafico').value, 10);
+  cfg.book = parseInt($('cfg-book').value, 10);
+  cfg.metricas = parseInt($('cfg-metricas').value, 10);
+  cfg.tf = $('cfg-tf').value;
+  cfg.custo = parseFloat($('cfg-custo').value);
+  cfg.fator = parseFloat($('cfg-fator').value);
+
+  salvaConfig();
+  aplicaTimers();
+  aplicaTimeframe(cfg.tf);
+  $('f-custo').value = cfg.custo;
+  $('f-fator').value = cfg.fator;
+  fechaConfig();
+}
+
+$('btn-config').onclick = abreConfig;
+$('cfg-fechar').onclick = fechaConfig;
+$('cfg-cancelar').onclick = fechaConfig;
+$('cfg-salvar').onclick = aplicarConfigDaTela;
+$('modal-config').addEventListener('click', e => {
+  if (e.target === $('modal-config')) fechaConfig();   // clique no fundo fecha
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('modal-config').classList.contains('aberto')) fechaConfig();
+});
+
 // ==================== boot ====================
 // erros aparecem no painel de log em vez de morrer calado
 window.__erros = [];
@@ -284,11 +437,14 @@ window.addEventListener('unhandledrejection', e => {
 
 (async () => {
   try {
+    carregaConfig();
     initChart();
     $('repo-path').textContent = await window.lab.repo();
     $('log-out').textContent = await window.lab.logtail();
+    $('f-custo').value = cfg.custo;
+    $('f-fator').value = cfg.fator;
+    aplicaTimeframe(cfg.tf);
     await tick();
-    await carregaGrafico(true);
   } catch (err) {
     window.__erros.push('boot: ' + err.message);
     $('log-out').textContent = 'FALHA NO BOOT: ' + err.message + '\n' + err.stack;
@@ -296,7 +452,6 @@ window.addEventListener('unhandledrejection', e => {
     return;
   }
 
-  setInterval(tick, 1500);                    // status, metricas, book
-  setInterval(() => carregaGrafico(false), 1000);  // grafico a 1 s, incremental
+  aplicaTimers();   // cadencias vem das configuracoes
   window.__ready = true;              // sinaliza boot completo (usado nos testes)
 })();
