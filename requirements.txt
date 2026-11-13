@@ -3,3 +3,4 @@ psycopg2-binary==2.9.13
 pandas==2.3.3
 numpy==2.3.4
 scipy==1.16.3
+pytest==9.2.0

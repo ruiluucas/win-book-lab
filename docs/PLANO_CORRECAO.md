@@ -149,17 +149,29 @@ protocolo, impresso no cabeçalho.
 
 ## Bloco 3 — Ressalva sobre a janela (registro, não correção)
 
-**Verificado em 13/11:**
+> **Nota do dono (13/11):** criar um arquivo às 10:40 não prova execução naquele horário.
+> A evidência abaixo é de **execução** (arquivo de saída do terminal), não de criação.
+
+**Verificado com evidência de EXECUÇÃO, não de criação do arquivo:**
+
+| evento | timestamp | fonte |
+|---|---|---|
+| coleta começou | 09:20:25 | `min(ts)` da tabela `book` |
+| arquivo criado | 10:40:42.946 | `stat` ctime |
+| **primeira execução** | **10:40:51.099** | **`~/.hermes/cache/rtk-transform/20261113-104051-terminal.txt`** |
+
+A saída do terminal registra, no momento da execução:
 
 ```
-coleta comecou:          09:20:25
-book_estrito.py criado:  10:40:42
-diferenca:               80,3 min
+snapshots: 22,395 | 80 min
+h=3 → n_indep 26, 50.0%, +0.6 pts, p=0.977
 ```
 
-O script rodou sobre **todo o banco existente** naquele instante. A janela de 80 min
-**não foi escolhida** — era o universo disponível. **Não houve seleção retrospectiva
-de janela.**
+**Isso prova três coisas:** o script rodou às 10:40:51; havia 22.395 snapshots (80 min)
+naquele instante; o resultado publicado é exatamente o daquela execução.
+
+O script rodou sobre **todo o banco existente**. A janela de 80 min **não foi escolhida**
+— era o universo disponível. **Não houve seleção retrospectiva de janela.**
 
 **O vício real é outro:** a coleta continuou até 12:51, mais que o dobro. Com os dados
 adicionais, h=3 passou de **50,0% (p=0,977)** para **47,6% (p=0,368)**.
