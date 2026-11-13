@@ -11,3 +11,4 @@ dados/
 
 # EXCECAO: fixtures de teste (pequenas, sem dado sensivel, necessarias ao pytest)
 !tests/fixtures/*.csv
+logs/
